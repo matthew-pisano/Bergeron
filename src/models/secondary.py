@@ -2,15 +2,15 @@ import torch
 import transformers.utils
 from transformers import AutoModelForCausalLM, AutoTokenizer, PreTrainedModel, PreTrainedTokenizer
 
+from src.models.base_model import BaseModel
 
-class Secondary:
 
-    def __init__(self, pretrained_critique_name_or_path: str, pretrained_summarizer_name_or_path: str):
-        self.critique_model: PreTrainedModel = AutoModelForCausalLM.from_pretrained(pretrained_critique_name_or_path)
-        self.critique_tokenizer: PreTrainedTokenizer = AutoTokenizer.from_pretrained(pretrained_critique_name_or_path)
+class Secondary(BaseModel):
 
-        self.summarizer_model: PreTrainedModel = AutoModelForCausalLM.from_pretrained(pretrained_summarizer_name_or_path)
-        self.summarizer_tokenizer: PreTrainedTokenizer = AutoTokenizer.from_pretrained(pretrained_summarizer_name_or_path)
+    def __init__(self, critique_model_name: str, summarizer_model_name: str):
+        self.critique_model, self.critique_tokenizer = self.from_pretrained(critique_model_name)
+
+        self.summarizer_model, self.summarizer_tokenizer = self.from_pretrained(summarizer_model_name)
 
     def summarize(self, inputs: torch.Tensor, **kwargs):
         return self.summarizer_model.generate(inputs, **kwargs)
