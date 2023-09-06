@@ -17,12 +17,21 @@ class Combined:
 
         input_critique = self.secondary.critique(summarized_inputs)
 
-        corrected_inputs = self.secondary.correct(inputs, input_critique)
+        self.insert_conscience(inputs, input_critique)
 
-        response = self.primary.generate(corrected_inputs)
+        response = self.primary.generate(inputs)
 
         resp_critique = self.secondary.critique(response)
         resp_correction = self.secondary.correct(response, resp_critique)
 
         return resp_correction
+
+    @staticmethod
+    def insert_conscience(inputs: torch.Tensor, input_critique: torch.Tensor):
+        for i in range(len(inputs)):
+            inputs[i] = \
+f"""{inputs[i]}
+
+When looking at the above input, your conscience says {input_critique[i]}
+Take this into account as you respond to the prompt."""
 
