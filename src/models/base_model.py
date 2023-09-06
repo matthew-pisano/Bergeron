@@ -1,3 +1,4 @@
+import torch
 from transformers import PreTrainedModel, AutoModelForCausalLM, PreTrainedTokenizer, AutoTokenizer
 
 from src.models.openai_model import OpenAIModel, OpenAITokenizer

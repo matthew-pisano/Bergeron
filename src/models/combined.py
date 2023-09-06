@@ -11,16 +11,15 @@ class Combined:
         self.primary = primary_model
         self.secondary = secondary_model
 
-    def format_prompt(self, prompt: torch.Tensor, critique: torch.Tensor):
-        return torch.Tensor()
-
     def generate(self, inputs: torch.Tensor, **kwargs):
 
         summarized_inputs = self.secondary.summarize(inputs)
 
         input_critique = self.secondary.critique(summarized_inputs)
 
-        response = self.primary.generate(self.format_prompt(inputs, input_critique))
+        corrected_inputs = self.secondary.correct(inputs, input_critique)
+
+        response = self.primary.generate(corrected_inputs)
 
         resp_critique = self.secondary.critique(response)
         resp_correction = self.secondary.correct(response, resp_critique)
