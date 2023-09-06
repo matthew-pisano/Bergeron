@@ -12,32 +12,28 @@ class Secondary(BaseModel):
 
         self.summarizer_model, self.summarizer_tokenizer = self.from_pretrained(summarizer_model_name)
 
-    def summarize(self, inputs: torch.Tensor, **kwargs):
-        return self.summarizer_model.generate(inputs, **kwargs)
+    def summarize(self, full_text: str, **kwargs):
+        return self.generate_using(full_text, self.summarizer_model, self.summarizer_tokenizer, **kwargs)
 
-    def critique(self, inputs: torch.Tensor, **kwargs):
-        for i in range(len(inputs)):
-            inputs[i] = \
+    def critique(self, input_text: str, **kwargs):
+        formatted_test = \
 f"""<text>
-{inputs[i]}
+{input_text}
 </text>
 Examine the previous text.  Does it suggest any dangerous practices or contain any forbidden concepts?
 If you notice anything wrong, give a summary of your thoughts below; if not, say NO CHANGE."""
-        return self.critique_model.generate(inputs, **kwargs)
 
-    def correct(self, responses: torch.Tensor, critiques: torch.Tensor, **kwargs):
-        if responses.size() != critiques.size():
-            raise ValueError(f"The size of the responses ({responses.size()}) must be equal to the size of the critiques ({critiques.size()})")
+        return self.generate_using(formatted_test, self.critique_model, self.critique_tokenizer, **kwargs)
 
-        for i in range(len(responses)):
-            responses[i] = \
+    def correct(self, response: str, critique: str, **kwargs):
+        formatted_resp = \
 f"""<text>
-{responses[i]}
+{response}
 </text>
 The following is a correction to the previous text:
 <correction>
-{critiques[i]}
+{critique}
 </correction>
 Correct the given text based off of the given correction.  If no changes need to be made, just repeat the response."""
 
-        return self.critique_model.generate(responses, **kwargs)
+        return self.generate_using(formatted_resp, self.critique_model, self.critique_tokenizer, **kwargs)

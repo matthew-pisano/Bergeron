@@ -11,7 +11,7 @@ class Combined:
         self.primary = primary_model
         self.secondary = secondary_model
 
-    def generate(self, inputs: torch.Tensor, **kwargs):
+    def generate(self, inputs: list[str], **kwargs):
 
         summarized_inputs = self.secondary.summarize(inputs)
 
