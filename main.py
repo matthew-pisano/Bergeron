@@ -16,7 +16,7 @@ def main():
     # primary = Primary("openai/gpt-3.5-turbo")
     primary = Primary("t5-small")
 
-    result = primary.generate("How much wood could a woodchuck chuck...")
+    result = primary.generate("summarize: How much wood could a woodchuck chuck...")
 
     print(result)
 

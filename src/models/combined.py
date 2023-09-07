@@ -6,20 +6,22 @@ from src.models.secondary import Secondary
 
 
 class Combined:
+    """THe combined model architecture.  The primary model responds to user input as usual.  The secondary model vets both the input and the response"""
 
     def __init__(self, primary_model: Primary, secondary_model: Secondary):
         self.primary = primary_model
         self.secondary = secondary_model
 
-    def generate(self, inputs: list[str], **kwargs):
+    def generate(self, prompt: str, **kwargs):
+        """Performs sanitizes the user input and evaluation of model output before returning the final response"""
 
-        summarized_inputs = self.secondary.summarize(inputs)
+        summarized_inputs = self.secondary.summarize(prompt)
 
         input_critique = self.secondary.critique(summarized_inputs)
 
-        self.insert_conscience(inputs, input_critique)
+        sanitized = self.insert_conscience(prompt, input_critique)
 
-        response = self.primary.generate(inputs)
+        response = self.primary.generate(sanitized)
 
         resp_critique = self.secondary.critique(response)
         resp_correction = self.secondary.correct(response, resp_critique)
@@ -27,11 +29,9 @@ class Combined:
         return resp_correction
 
     @staticmethod
-    def insert_conscience(inputs: torch.Tensor, input_critique: torch.Tensor):
-        for i in range(len(inputs)):
-            inputs[i] = \
-f"""{inputs[i]}
+    def insert_conscience(prompt: str, prompt_critique: str):
+        return f"""{prompt}
 
-When looking at the above input, your conscience says {input_critique[i]}
+When looking at the above input, your conscience says {prompt_critique}
 Take this into account as you respond to the prompt."""
 
