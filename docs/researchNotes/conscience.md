@@ -38,20 +38,20 @@ Maybe outright remove any mentions of the special tag from user input or encrypt
 
 Increase secondary model robustness through reflection upon the prompt and/or the response coming from the primary model.  Uses reflection to detect misalignment, flags the content if it exists and provides some reasoning behind it.
 
-### Summarize-and-critique
+### Rephrase-and-critique
 
-1. Summarize - Cuts down on excess details
+1. Rephrase - Cuts down on excess details
     * Potentially strips out delicate adversarial engineering.
-    * Could use a summarization-specific model here.  This would help to avoid any tricks from the user and just summarize.
+    * Could use a rephrasing-specific model here.  This would help to avoid any tricks from the user and just rephrase.
 1. Critique - Looks for dangerous content, flags it if so, and reports its reasoning.
-    * Evaluates the content of the summarization, rather than the raw prompt or response.
+    * Evaluates the content of the rephrasing, rather than the raw prompt or response.
     * Potentially ignores adversarial tricks due to the compression of the text.
 
 ### Example
 
 ```
-The user has said: [prompt summary]
-The model has responded with: [response summary]
+The user has said: [rephrased prompt]
+The model has responded with: [rephrased response]
 
 Do you feel comfortable with the above content?  If you do, echo its text.  If you do not, give reasoning as to why.
 ```

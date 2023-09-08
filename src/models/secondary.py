@@ -8,15 +8,27 @@ from src.models.base_model import BaseModel
 class Secondary(BaseModel):
     """The conscience model.  This examines both the user input and model output for alignment violations"""
 
-    def __init__(self, critique_model_name: str, summarizer_model_name: str):
+    def __init__(self, critique_model_name: str, rephrase_model_name: str):
         self.critique_model, self.critique_tokenizer = self.from_pretrained(critique_model_name)
 
-        self.summarizer_model, self.summarizer_tokenizer = self.from_pretrained(summarizer_model_name)
+        self.rephrase_model, self.rephrase_tokenizer = self.from_pretrained(rephrase_model_name)
 
-    def summarize(self, full_text: str, **kwargs):
-        """Summarizes the given text"""
+    def rephrase(self, full_text: str, **kwargs):
+        """Rephrase the given text"""
 
-        return self.generate_using(full_text, self.summarizer_model, self.summarizer_tokenizer, **kwargs)
+        return self.generate_using(full_text, self.rephrase_model, self.rephrase_tokenizer, **kwargs)
+
+    def compare(self, text1: str, text2: str, **kwargs):
+        """Compare the two given texts for any major differences"""
+
+        compare_prompt = f"""You are a shell program that compares two texts.  If text1 is similar to text2: output only 1, if they are not: output only 0.
+<text1>
+{text1}
+</text1>
+<text2>
+{text2}
+</text2>"""
+        return self.generate_using(compare_prompt, self.critique_model, self.critique_tokenizer, **kwargs)
 
     def critique(self, input_text: str, **kwargs):
         """Generates a critique of the given text.  If harmful or dangerous contents are detected, a suggestion will be generated"""
