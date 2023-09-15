@@ -1,6 +1,10 @@
-import torch
-from transformers import PreTrainedModel, AutoModelForCausalLM, PreTrainedTokenizer, AutoTokenizer, AutoModel, AutoConfig
 
+
+import torch
+from transformers import PreTrainedModel, AutoModelForCausalLM, PreTrainedTokenizer, AutoTokenizer, AutoModel
+
+from src.models.hf_model import HFModel, HFTokenizer
+from src.models.model_utils import ModelSrc
 from src.models.openai_model import OpenAIModel, OpenAITokenizer
 
 
@@ -15,13 +19,13 @@ class BaseModel:
         return tokenizer.decode(generated)
 
     @staticmethod
-    def from_pretrained(pretrained_model_name_or_path: str) -> tuple[PreTrainedModel, PreTrainedTokenizer]:
+    def from_pretrained(pretrained_model_name_or_path: str, model_src: ModelSrc) -> tuple[PreTrainedModel, PreTrainedTokenizer]:
         """Gets the pretrained model and tokenizer from the given model name"""
 
-        if pretrained_model_name_or_path.startswith("openai"):
-            model_name = pretrained_model_name_or_path.split("/")[-1]
-            return OpenAIModel(model_name), OpenAITokenizer(model_name)
-
+        if model_src == ModelSrc.OPENAI_API:
+            return OpenAIModel(pretrained_model_name_or_path), OpenAITokenizer(pretrained_model_name_or_path)
+        elif model_src == ModelSrc.HF_API:
+            return HFModel(pretrained_model_name_or_path), HFTokenizer(pretrained_model_name_or_path)
         else:
             try:
                 model = AutoModelForCausalLM.from_pretrained(pretrained_model_name_or_path)
