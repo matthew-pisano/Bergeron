@@ -1,11 +1,12 @@
 import torch
 from transformers import AutoModelForCausalLM, AutoTokenizer, PreTrainedModel, PreTrainedTokenizer
 
+from src.models.base_model import BaseModel
 from src.models.primary import Primary
 from src.models.secondary import Secondary
 
 
-class Combined:
+class Combined(BaseModel):
     """The combined model architecture.  The primary model responds to user input as usual.  The secondary model vets both the input and the response"""
 
     def __init__(self, primary_model: Primary, secondary_model: Secondary):

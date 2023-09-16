@@ -3,16 +3,16 @@ import transformers.utils
 from transformers import AutoModelForCausalLM, AutoTokenizer, PreTrainedModel, PreTrainedTokenizer
 
 from src.models.base_model import BaseModel
-from src.models.model_utils import ModelSrc
+from src.models.model_utils import ModelSrc, ModelInfo
 
 
 class Secondary(BaseModel):
     """The conscience model.  This examines both the user input and model output for alignment violations"""
 
-    def __init__(self, critique_model_name: str, critique_model_src: ModelSrc, rephrase_model_name: str, rephrase_model_src: ModelSrc):
-        self.critique_model, self.critique_tokenizer = self.from_pretrained(critique_model_name, critique_model_src)
+    def __init__(self, critique_model_info: ModelInfo, rephrase_model_info: ModelInfo):
+        self.critique_model, self.critique_tokenizer = self.from_pretrained(critique_model_info)
 
-        self.rephrase_model, self.rephrase_tokenizer = self.from_pretrained(rephrase_model_name, rephrase_model_src)
+        self.rephrase_model, self.rephrase_tokenizer = self.from_pretrained(rephrase_model_info)
 
     def rephrase(self, full_text: str, **kwargs):
         """Rephrase the given text"""

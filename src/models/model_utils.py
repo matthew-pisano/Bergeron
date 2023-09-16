@@ -1,6 +1,7 @@
 from enum import Enum
 from typing import Union
 
+from transformers import PreTrainedModel, AutoModelForCausalLM, PreTrainedTokenizer, AutoTokenizer
 from transformers.tokenization_utils_base import TextInput, PreTokenizedInput, EncodedInput
 
 
@@ -9,6 +10,18 @@ class ModelSrc(Enum):
     LOCAL = "local"
     OPENAI_API = "openai"
     HF_API = "huggingface_hub"
+
+
+class ModelInfo:
+
+    def __init__(self, pretrained_model_name_or_path: str, model_src: ModelSrc, model_class: PreTrainedModel = AutoModelForCausalLM, tokenizer_class: PreTrainedTokenizer = AutoTokenizer):
+        self.pretrained_model_name_or_path = pretrained_model_name_or_path
+        self.model_src = model_src
+        self.model_class = model_class
+        self.tokenizer_class = tokenizer_class
+
+    def as_dict(self):
+        return vars(self)
 
 
 class SpoofTokenizer:
