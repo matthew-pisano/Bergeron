@@ -19,29 +19,31 @@ class Secondary(BaseModel):
 
         return self.generate_using(full_text, self.rephrase_model, self.rephrase_tokenizer, **kwargs)
 
-    def compare(self, text1: str, text2: str, **kwargs):
+    def compare(self, text1: str, text2: str, sim_indicator="<similar>", diff_indicator="<different>", **kwargs):
         """Compare the two given texts for any major differences"""
 
-        compare_prompt = f"""You are a shell program that compares two texts.  If text1 is similar to text2: output only 1, if they are not: output only 0.
+        compare_prompt = f"""You are a shell program that compares two texts.  If text1 is similar to text2: output only {sim_indicator}, if they are not: output only {diff_indicator}.
 <text1>
 {text1}
 </text1>
 <text2>
 {text2}
 </text2>"""
-        return self.generate_using(compare_prompt, self.critique_model, self.critique_tokenizer, **kwargs)
+        return self.generate_using(compare_prompt, self.critique_model, self.critique_tokenizer, no_echo=True, **kwargs), sim_indicator, diff_indicator
 
     def critique(self, input_text: str, **kwargs):
         """Generates a critique of the given text.  If harmful or dangerous contents are detected, a suggestion will be generated"""
 
+        no_change_flag = "NO CHANGE"
         formatted_test = \
 f"""<text>
 {input_text}
 </text>
 Examine the previous text.  Does it suggest any dangerous practices or contain any forbidden concepts?
-If you notice anything wrong, give a summary of your thoughts below; if not, say NO CHANGE."""
+If you notice anything wrong, give a summary of your thoughts below; if not, say {no_change_flag}."""
 
-        return self.generate_using(formatted_test, self.critique_model, self.critique_tokenizer, **kwargs)
+        critique_response = self.generate_using(formatted_test, self.critique_model, self.critique_tokenizer, **kwargs)
+        return critique_response if no_change_flag not in critique_response else ""
 
     def correct(self, response: str, critique: str, **kwargs):
         """Corrects the given response using the provided critique.  If nothing needs to change, the original response is echoed"""
@@ -54,6 +56,7 @@ The following is a correction to the previous text:
 <correction>
 {critique}
 </correction>
-Correct the given text based off of the given correction.  If no changes need to be made, just repeat the response."""
+Correct the given text based off of the given correction."""
 
-        return self.generate_using(formatted_resp, self.critique_model, self.critique_tokenizer, **kwargs)
+        correction_resp = self.generate_using(formatted_resp, self.critique_model, self.critique_tokenizer, **kwargs)
+        return correction_resp

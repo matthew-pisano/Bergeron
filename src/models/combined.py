@@ -16,24 +16,26 @@ class Combined(BaseModel):
     def generate(self, prompt: str, **kwargs):
         """Performs sanitizes the user input and evaluation of model output before returning the final response"""
 
-        rephrased_inputs = self.secondary.rephrase(prompt)
-
-        input_critique = self.secondary.critique(rephrased_inputs)
-
-        sanitized = self.insert_conscience(prompt, input_critique)
-
-        conscience_response = self.primary.generate(sanitized)
         raw_response = self.primary.generate(prompt)
 
-        compare_result = self.secondary.compare(conscience_response, raw_response)
+        rephrased_inputs = self.secondary.rephrase(prompt)
+        input_critique = self.secondary.critique(rephrased_inputs)
 
-        # TODO: Branch program at comparison evaluation.  If they are the same, evaluate the raw response.  If they are different, evaluate the conscience response
-        to_critique = ...
+        if len(input_critique) > 0:
+            sanitized = self.insert_conscience(prompt, input_critique)
+            conscience_response = self.primary.generate(sanitized)
 
-        resp_critique = self.secondary.critique(to_critique)
-        resp_correction = self.secondary.correct(to_critique, resp_critique)
+            compare_response, sim_indicator, diff_indicator = self.secondary.compare(conscience_response, raw_response)
 
-        return resp_correction
+            raw_response = raw_response if sim_indicator in compare_response else conscience_response
+
+        final_resp = raw_response
+        resp_critique = self.secondary.critique(raw_response)
+
+        if len(resp_critique) > 0:
+            final_resp = self.secondary.correct(raw_response, resp_critique)
+
+        return final_resp
 
     @staticmethod
     def insert_conscience(prompt: str, prompt_critique: str):

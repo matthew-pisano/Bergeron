@@ -10,6 +10,7 @@ class ModelSrc(Enum):
     LOCAL = "local"
     OPENAI_API = "openai"
     HF_API = "huggingface_hub"
+    DEV = "dev"
 
 
 class ModelInfo:

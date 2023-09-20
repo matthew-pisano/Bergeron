@@ -5,11 +5,14 @@ import time
 
 import openai
 from dotenv import load_dotenv
-from transformers import LlamaForCausalLM, LlamaTokenizer
+from transformers import LlamaForCausalLM, LlamaTokenizer, set_seed
 
+from src.logger import root_logger
 from src.models.base_model import BaseModel
+from src.models.combined import Combined
 from src.models.model_utils import ModelSrc, ModelInfo
 from src.models.primary import Primary
+from src.models.secondary import Secondary
 
 load_dotenv()
 openai.api_key = os.getenv("OPENAI_API_KEY")
@@ -51,16 +54,32 @@ def main():
     main_start = time.time()
     print(f"Begin main at {datetime.datetime.utcfromtimestamp(main_start)} UTC")
 
-    # model_name, model_src = "gpt-3.5-turbo", ModelSrc.OPENAI_API
-    # model_name, model_src = "PY007/TinyLlama-1.1B-step-50K-105b", ModelSrc.LOCAL
-    # model_name, model_src = "Open-Orca/OpenOrca-Platypus2-13B", ModelSrc.HF_API
-    # model_name, model_src = "gpt2", ModelSrc.HF_API
-    model_name, model_src = "lmsys/vicuna-7b-v1.5", ModelSrc.LOCAL
+    # root_logger.set_level(root_logger.DEBUG)
+    rand = random.randint(0, 100)
+    print(f"Setting random seed to {rand}")
+    set_seed(rand)
 
-    model_info = ModelInfo(model_name, model_src, LlamaForCausalLM, LlamaTokenizer)
+    # model_name, model_src, model_class, tokenizer_class = "gpt-3.5-turbo", ModelSrc.OPENAI_API, None, None
+    # model_name, model_src, model_class, tokenizer_class = "PY007/TinyLlama-1.1B-step-50K-105b", ModelSrc.LOCAL, LlamaForCausalLM, LlamaTokenizer
+    # model_name, model_src, model_class, tokenizer_class = "Open-Orca/OpenOrca-Platypus2-13B", ModelSrc.HF_API, LlamaForCausalLM, LlamaTokenizer
+    # model_name, model_src, model_class, tokenizer_class = "gpt2", ModelSrc.HF_API, None, None
+    # model_name, model_src, model_class, tokenizer_class = "lmsys/vicuna-7b-v1.5", ModelSrc.LOCAL, LlamaForCausalLM, LlamaTokenizer
+    # model_name, model_src, model_class, tokenizer_class = "meta-llama/Llama-2-7b-chat-hf", ModelSrc.LOCAL, LlamaForCausalLM, LlamaTokenizer
+    model_name, model_src, model_class, tokenizer_class = "dev/human", ModelSrc.DEV, None, None
+
+    model_info = ModelInfo(model_name, model_src, model_class, tokenizer_class)
+
+    model_name, model_src, model_class, tokenizer_class = "dev/echo", ModelSrc.DEV, None, None
+    rephrase_model_info = ModelInfo(model_name, model_src, model_class, tokenizer_class)
+
     primary = Primary(model_info)
+    secondary = Secondary(model_info, rephrase_model_info)
 
-    converse(primary)
+    combined = Combined(primary, secondary)
+
+    response = combined.generate("Write a poem about flowers")
+
+    print(response)
 
     main_end = time.time()
     print(f"End main at {datetime.datetime.utcfromtimestamp(main_end)} UTC")
