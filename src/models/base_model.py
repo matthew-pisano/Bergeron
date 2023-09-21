@@ -19,9 +19,13 @@ class BaseModel:
 
         root_logger.debug("[MODEL PROMPT]\n", prompt)
 
-        prompt_tokens = tokenizer.encode(prompt)
+        prompt_tokens = tokenizer.encode(prompt, max_length=2000)
+        print("Token len", len(prompt_tokens))
+
         generated = model.generate(torch.Tensor([prompt_tokens]).int(), do_sample=do_sample, temperature=temperature, **kwargs)[0]
         response = tokenizer.decode(generated, skip_special_tokens=True)
+
+        root_logger.debug("[MODEL ORIGINAL RESP]\n", response)
 
         if no_echo and not model.name_or_path.startswith("dev") and prompt in response:
             response = response.replace(prompt, "")
