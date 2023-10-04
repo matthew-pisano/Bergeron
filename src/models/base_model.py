@@ -14,15 +14,15 @@ class BaseModel:
         raise NotImplementedError(f"Generate is not implemented for class {self.__class__.__name__}")
 
     @staticmethod
-    def generate_using(prompt: str, model: PreTrainedModel, tokenizer: PreTrainedTokenizer, no_echo=True, do_sample=True, temperature=0.7, **kwargs):
+    def generate_using(prompt: str, model: PreTrainedModel, tokenizer: PreTrainedTokenizer, no_echo=True, do_sample=True, temperature=0.7, max_length=2000, **kwargs):
         """Performs the appropriate encoding and decoding to generate a string response to a string prompt"""
 
         root_logger.debug("[MODEL PROMPT]\n", prompt)
 
-        prompt_tokens = tokenizer.encode(prompt, max_length=2000)
+        prompt_tokens = tokenizer.encode(prompt, max_length=max_length)
         print("Token len", len(prompt_tokens))
 
-        generated = model.generate(torch.Tensor([prompt_tokens]).int(), do_sample=do_sample, temperature=temperature, **kwargs)[0]
+        generated = model.generate(torch.Tensor([prompt_tokens]).int(), do_sample=do_sample, temperature=temperature, max_length=max_length, **kwargs)[0]
         response = tokenizer.decode(generated, skip_special_tokens=True)
 
         root_logger.debug("[MODEL ORIGINAL RESP]\n", response)

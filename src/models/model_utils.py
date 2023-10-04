@@ -15,7 +15,7 @@ class ModelSrc(Enum):
 
 class ModelInfo:
 
-    def __init__(self, pretrained_model_name_or_path: str, model_src: ModelSrc, model_class: PreTrainedModel = AutoModelForCausalLM, tokenizer_class: PreTrainedTokenizer = AutoTokenizer):
+    def __init__(self, pretrained_model_name_or_path: str, model_src: ModelSrc, model_class: PreTrainedModel | None = AutoModelForCausalLM, tokenizer_class: PreTrainedTokenizer | None = AutoTokenizer):
         self.pretrained_model_name_or_path = pretrained_model_name_or_path
         self.model_src = model_src
         self.model_class = model_class
