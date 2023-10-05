@@ -6,6 +6,7 @@ from transformers import PreTrainedModel, PreTrainedTokenizer
 from transformers.generation.utils import GenerateOutput
 from transformers.tokenization_utils_base import TextInput, EncodedInput, PreTokenizedInput
 
+from src.logger import root_logger
 from src.models.model_utils import SpoofTokenizer
 
 
@@ -19,12 +20,29 @@ class OpenAIModel(PreTrainedModel):
     def generate(self, inputs: Optional[torch.Tensor] = None, **kwargs) -> Union[GenerateOutput, torch.LongTensor]:
         """Spoofs the pretrained model generation to make it fit for API generation"""
 
+        if "max_length" in kwargs:
+            kwargs["max_tokens"] = kwargs["max_length"]
+            kwargs.pop("max_length")
+
+        if "do_sample" in kwargs:
+            kwargs.pop("do_sample")
+
         responses = []
 
         for encoded_prompt in inputs:
             prompt = self.tokenizer.decode(encoded_prompt.tolist())
-            resp = openai.Completion.create(model=self.name_or_path, prompt=prompt)
-            responses.append(self.tokenizer.encode(resp["choices"]["text"]))
+
+            if "gpt-" in self.name_or_path:
+                resp = openai.ChatCompletion.create(model=self.name_or_path.split("/")[-1], messages=[
+                    {"role": "system", "content": "You are a helpful assistant."},
+                    {"role": "user", "content": prompt}], **kwargs)
+                resp_text = resp["choices"][0]["message"]["content"]
+            else:
+                resp = openai.Completion.create(model=self.name_or_path.split("/")[-1], prompt=prompt, **kwargs)
+                resp_text = resp["choices"][0]["text"]
+
+            root_logger.debug("OpenAI resp", resp)
+            responses.append(self.tokenizer.encode(resp_text))
 
         return torch.LongTensor(responses)
 

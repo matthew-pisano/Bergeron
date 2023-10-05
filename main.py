@@ -1,8 +1,10 @@
 import datetime
 import os
 import random
+import subprocess
 import sys
 import time
+from subprocess import Popen
 
 import numpy.random
 import openai
@@ -22,7 +24,21 @@ load_dotenv()
 openai.api_key = os.getenv("OPENAI_API_KEY")
 
 
-def converse(model: BaseModel):
+def use_fastchat_model(model_path: str):
+    root_logger.info("Initializing fastchat controller...")
+    Popen(['python3', '-m', 'fastchat.serve.controller'], stdout=subprocess.DEVNULL, stderr=subprocess.STDOUT)
+    time.sleep(3)
+    root_logger.info(f"Initializing {model_path} worker...")
+    Popen(['python3', '-m', 'fastchat.serve.model_worker', '--model-path', model_path], stdout=subprocess.DEVNULL, stderr=subprocess.STDOUT)
+    time.sleep(10)
+    root_logger.info("Starting fastchat openai server...")
+    Popen(['python3', '-m', 'fastchat.serve.openai_api_server', '--host', 'localhost', '--port', '8000'], stdout=subprocess.DEVNULL, stderr=subprocess.STDOUT)
+    time.sleep(5)
+    root_logger.info("Started!")
+    openai.api_base = "http://localhost:8000/v1"
+
+
+def converse(model: BaseModel, **kwargs):
 
     print("Enter ':q' to quit loop\nEnter ':s' to submit your response\nEnter ':r' to repeat the last non-command response")
 
@@ -44,7 +60,7 @@ def converse(model: BaseModel):
             context += response + "\n"
 
         try:
-            model_response = model.generate(context[:-1])
+            model_response = model.generate(context[:-1], **kwargs)
         except KeyboardInterrupt as e:
             print("Keyboard interrupt: canceling generation")
             continue
@@ -109,12 +125,27 @@ def main():
     seed = random.randint(0, 100)
     set_seed(seed)
 
-    if args[0] == "converse":
-        model_name, model_src, model_class, tokenizer_class = "lmsys/vicuna-7b-v1.5", ModelSrc.LOCAL, LlamaForCausalLM, LlamaTokenizer
-        model_info = ModelInfo(model_name, model_src, model_class, tokenizer_class)
-        converse(Primary(model_info))
-    elif len(args) == 0 or args[0] == "debug":
+    if len(args) == 0 or args[0] == "debug":
         debug()
+    elif args[0] == "converse":
+        root_logger.set_level(root_logger.DEBUG)
+        # model_name, model_src, model_class, tokenizer_class = "dev/human", ModelSrc.DEV, None, None
+        model_name, model_src, model_class, tokenizer_class = "meta-llama/Llama-2-7b-chat-hf", ModelSrc.OPENAI_API, LlamaForCausalLM, LlamaTokenizer
+        use_fastchat_model(model_name)
+        # model_name, model_src, model_class, tokenizer_class = "gpt-3.5-turbo", ModelSrc.OPENAI_API, LlamaForCausalLM, LlamaTokenizer
+
+        model_info = ModelInfo(model_name, model_src, model_class, tokenizer_class)
+
+        model_name, model_src, model_class, tokenizer_class = "dev/echo", ModelSrc.DEV, None, None
+        rephrase_model_info = ModelInfo(model_name, model_src, model_class, tokenizer_class)
+
+        primary = Primary(model_info)
+
+        secondary = Secondary(model_info, rephrase_model_info)
+
+        combined = Combined(primary, secondary)
+
+        converse(combined, max_length=1024)
 
     main_end = time.time()
     print(f"End main at {datetime.datetime.utcfromtimestamp(main_end)} UTC")
