@@ -17,10 +17,12 @@ class BaseModel:
     def generate_using(prompt: str, model: PreTrainedModel, tokenizer: PreTrainedTokenizer, no_echo=True, do_sample=True, temperature=0.7, max_length=512, **kwargs):
         """Performs the appropriate encoding and decoding to generate a string response to a string prompt"""
 
+        if max_length is None:
+            max_length = 512
+
         root_logger.debug("[MODEL PROMPT]\n", prompt)
 
         prompt_tokens = tokenizer.encode(prompt)
-        root_logger.debug("Token len", len(prompt_tokens), "Max length", max_length)
 
         generated = model.generate(torch.Tensor([prompt_tokens]).int(), do_sample=do_sample, temperature=temperature, max_length=max_length, **kwargs)[0]
         response = tokenizer.decode(generated, skip_special_tokens=True)
@@ -32,7 +34,7 @@ class BaseModel:
 
         # root_logger.debug("[MODEL RESP]\n", response)
 
-        return response
+        return response.strip("\n")
 
     @staticmethod
     def from_pretrained(model_info: ModelInfo) -> tuple[PreTrainedModel, PreTrainedTokenizer]:

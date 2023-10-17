@@ -18,14 +18,14 @@ class HFModel(PreTrainedModel):
         self.tokenizer = HFTokenizer(model_name)
 
     @torch.no_grad()
-    def generate(self, inputs: Optional[torch.Tensor] = None, **kwargs) -> Union[GenerateOutput, torch.LongTensor]:
+    def generate(self, inputs: Optional[torch.Tensor] = None, do_sample=True, temperature=0.7, max_length=None, **kwargs) -> Union[GenerateOutput, torch.LongTensor]:
         """Spoofs the pretrained model generation to make it fit for API generation"""
 
         responses = []
 
         for encoded_prompt in inputs:
             prompt = self.tokenizer.decode(encoded_prompt.tolist())
-            resp = self.api_model(inputs=prompt)
+            resp = self.api_model(inputs=prompt, params={"max_new_tokens": max_length, "return_full_text": False, "repetition_penalty": 1.5})
             responses.append(self.tokenizer.encode(resp[0]["generated_text"]))
 
         return torch.LongTensor(responses)
