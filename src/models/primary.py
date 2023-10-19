@@ -11,6 +11,10 @@ class Primary(BaseModel):
     def __init__(self, model_info: ModelInfo):
         self.model, self.tokenizer = self.from_pretrained(model_info)
 
+    @property
+    def name(self):
+        return f"P({self.model.name_or_path})"
+
     def generate(self, prompt: str, **kwargs):
         """Generates a response to the given prompt using the primary model"""
 

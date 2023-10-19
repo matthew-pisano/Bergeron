@@ -14,6 +14,10 @@ class Secondary(BaseModel):
 
         self.rephrase_model, self.rephrase_tokenizer = self.from_pretrained(rephrase_model_info)
 
+    @property
+    def name(self):
+        return f"S({self.critique_model.name_or_path})"
+
     def rephrase(self, full_text: str, **kwargs):
         """Rephrase the given text"""
 

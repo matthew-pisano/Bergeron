@@ -10,21 +10,25 @@ from src.logger import root_logger
 
 class BaseModel:
 
+    @property
+    def name(self):
+        raise NotImplementedError(f"Name is not implemented for class {self.__class__.__name__}")
+
     def generate(self, prompt: str, **kwargs):
         raise NotImplementedError(f"Generate is not implemented for class {self.__class__.__name__}")
 
     @staticmethod
-    def generate_using(prompt: str, model: PreTrainedModel, tokenizer: PreTrainedTokenizer, no_echo=True, do_sample=True, temperature=0.7, max_length=512, **kwargs):
+    def generate_using(prompt: str, model: PreTrainedModel, tokenizer: PreTrainedTokenizer, no_echo=True, do_sample=True, temperature=0.7, max_new_tokens=128, **kwargs):
         """Performs the appropriate encoding and decoding to generate a string response to a string prompt"""
 
-        if max_length is None:
-            max_length = 512
+        if max_new_tokens is None:
+            max_new_tokens = 128
 
         root_logger.debug("[MODEL PROMPT]\n", prompt)
 
         prompt_tokens = tokenizer.encode(prompt)
 
-        generated = model.generate(torch.Tensor([prompt_tokens]).int(), do_sample=do_sample, temperature=temperature, max_length=max_length, **kwargs)[0]
+        generated = model.generate(torch.Tensor([prompt_tokens]).int(), do_sample=do_sample, temperature=temperature, max_new_tokens=max_new_tokens, **kwargs)[0]
         response = tokenizer.decode(generated, skip_special_tokens=True)
 
         # root_logger.debug("[MODEL ORIGINAL RESP]\n", response)

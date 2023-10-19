@@ -8,6 +8,7 @@ from transformers.generation.utils import GenerateOutput
 from transformers.tokenization_utils_base import TextInput, EncodedInput, PreTokenizedInput
 
 from src.models.model_utils import SpoofTokenizer
+from src.logger import root_logger
 
 
 class DevModel(PreTrainedModel):
@@ -30,7 +31,7 @@ class DevModel(PreTrainedModel):
             prompt = self.tokenizer.decode(encoded_prompt.tolist())
 
             if self.name_or_path.endswith("human"):
-                resp = self.generate_human(prompt)
+                resp = self.manual_input(prompt)
             elif self.name_or_path.endswith("echo"):
                 resp = self.generate_echo(prompt)
             else:
@@ -41,9 +42,9 @@ class DevModel(PreTrainedModel):
         return torch.LongTensor(responses)
 
     @staticmethod
-    def generate_human(prompt: str):
-        print("[MANUAL PROMPT]\n", prompt)
-        print("[MANUAL INSTRUCTIONS] Enter ':s' to submit your response")
+    def manual_input(prompt: str):
+        root_logger.unchecked("[MANUAL PROMPT]\n", prompt)
+        root_logger.info("[MANUAL INSTRUCTIONS] Enter ':s' to submit your response")
 
         resp = ""
         while True:

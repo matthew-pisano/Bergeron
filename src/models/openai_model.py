@@ -1,3 +1,4 @@
+import time
 from typing import Optional, Union
 
 import torch
@@ -20,9 +21,9 @@ class OpenAIModel(PreTrainedModel):
     def generate(self, inputs: Optional[torch.Tensor] = None, **kwargs) -> Union[GenerateOutput, torch.LongTensor]:
         """Spoofs the pretrained model generation to make it fit for API generation"""
 
-        if "max_length" in kwargs:
-            kwargs["max_tokens"] = kwargs["max_length"]
-            kwargs.pop("max_length")
+        if "max_new_tokens" in kwargs:
+            kwargs["max_tokens"] = kwargs["max_new_tokens"]
+            kwargs.pop("max_new_tokens")
 
         if "do_sample" in kwargs:
             kwargs.pop("do_sample")
@@ -33,9 +34,18 @@ class OpenAIModel(PreTrainedModel):
             prompt = self.tokenizer.decode(encoded_prompt.tolist())
 
             if "gpt-" in self.name_or_path:
-                resp = openai.ChatCompletion.create(model=self.name_or_path.split("/")[-1], messages=[
-                    {"role": "system", "content": "You are a helpful assistant."},
-                    {"role": "user", "content": prompt}], **kwargs)
+                errors = 0
+                while errors < 3:
+                    try:
+                        resp = openai.ChatCompletion.create(model=self.name_or_path.split("/")[-1], messages=[
+                            {"role": "system", "content": "You are a helpful assistant."},
+                            {"role": "user", "content": prompt}], **kwargs)
+                        break
+                    except Exception as e:
+                        root_logger.error(f"Error calling OpenAIAPI: '{e}'")
+                        errors += 1
+                        time.sleep(30)
+
                 resp_text = resp["choices"][0]["message"]["content"]
             else:
                 resp = openai.Completion.create(model=self.name_or_path.split("/")[-1], prompt=prompt, **kwargs)

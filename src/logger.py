@@ -56,6 +56,9 @@ class Logger:
         if self.level <= self.CRITICAL:
             print(f"[CRITICAL @ {datetime.datetime.now().isoformat()}]", *msg)
 
+    def unchecked(self, *msg):
+        print(f"[PRINT @ {datetime.datetime.now().isoformat()}]", *msg)
+
 
 Logger('root')
 root_logger: Logger = _logger_registry['root']

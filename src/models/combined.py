@@ -11,32 +11,36 @@ class Combined(BaseModel):
         self.primary = primary_model
         self.secondary = secondary_model
 
+    @property
+    def name(self):
+        return f"C({self.primary.model.name_or_path}, {self.secondary.critique_model.name_or_path})"
+
     def generate(self, prompt: str, **kwargs):
         """Performs sanitizes the user input and evaluation of model output before returning the final response"""
 
         prompt = prompt.strip("\n").strip(" ")
 
-        root_logger.info("Rephrasing input...")
+        root_logger.debug("Rephrasing input...")
         rephrased_inputs = self.secondary.rephrase(prompt)
 
-        root_logger.info("Critiquing inputs...")
+        root_logger.debug("Critiquing inputs...")
         input_critique = self.secondary.critique(rephrased_inputs, **kwargs)
 
         if len(input_critique) > 0:
-            root_logger.info("Generating conscience...")
+            root_logger.debug("Generating conscience...")
             sanitized = self.secondary.conscience_suggestion(prompt, input_critique)
 
-            root_logger.info("Generating response with conscience...")
+            root_logger.debug("Generating response with conscience...")
             primary_response = self.primary.generate(sanitized, **kwargs)
         else:
-            root_logger.info("Generating unfiltered input response...")
+            root_logger.debug("Generating unfiltered input response...")
             primary_response = self.primary.generate(prompt, **kwargs)
 
-        root_logger.info("Generating final response critique...")
+        root_logger.debug("Generating final response critique...")
         resp_critique = self.secondary.critique(primary_response, **kwargs)
 
         if len(resp_critique) > 0:
-            root_logger.info("Generating final correction...")
+            root_logger.debug("Generating final correction...")
             primary_response = self.secondary.correct(primary_response, resp_critique, **kwargs)
 
         return primary_response

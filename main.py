@@ -1,73 +1,22 @@
 import datetime
 import os
 import random
-import subprocess
 import sys
 import time
-from subprocess import Popen
 
-import numpy.random
 import openai
-import torch
-import transformers
 from dotenv import load_dotenv
-from transformers import LlamaForCausalLM, LlamaTokenizer, AutoModelForCausalLM, AutoTokenizer
 
 from src.logger import root_logger
-from src.models.base_model import BaseModel
 from src.models.combined import Combined
 from src.models.model_utils import ModelSrc, ModelInfo
 from src.models.primary import Primary
 from src.models.secondary import Secondary
+from src.utils import set_seed, converse
 
 load_dotenv()
 openai.api_key = os.getenv("OPENAI_API_KEY")
-
-
-def use_fastchat_model(model_path: str):
-    root_logger.info("Initializing fastchat controller...")
-    Popen(['python3', '-m', 'fastchat.serve.controller'], stdout=subprocess.DEVNULL, stderr=subprocess.STDOUT)
-    time.sleep(3)
-    root_logger.info(f"Initializing {model_path} worker...")
-    Popen(['python3', '-m', 'fastchat.serve.model_worker', '--model-path', model_path], stdout=subprocess.DEVNULL, stderr=subprocess.STDOUT)
-    time.sleep(10)
-    root_logger.info("Starting fastchat openai server...")
-    Popen(['python3', '-m', 'fastchat.serve.openai_api_server', '--host', 'localhost', '--port', '8000'], stdout=subprocess.DEVNULL, stderr=subprocess.STDOUT)
-    time.sleep(5)
-    root_logger.info("Started!")
-    openai.api_base = "http://localhost:8000/v1"
-
-
-def converse(model: BaseModel, do_sample=True, temperature=0.7, max_length=None, **kwargs):
-
-    print("Enter ':q' to quit loop\nEnter ':s' to submit your response\nEnter ':r' to repeat the last non-command response")
-
-    context = ""
-    prev_context = ""
-    while True:
-        while True:
-            response = input("> ")
-            if response == ":q":
-                return
-            elif response == ":s":
-                break
-            elif response == ":r":
-                context = prev_context + "\n"
-                break
-            elif response.startswith(":") and len(response) == 2:
-                raise ValueError(f"Unrecognized command '{response}'")
-
-            context += response + "\n"
-
-        try:
-            model_response = model.generate(context[:-1], do_sample=do_sample, temperature=temperature, max_length=max_length, **kwargs)
-        except KeyboardInterrupt as e:
-            print("Keyboard interrupt: canceling generation")
-            continue
-
-        print(model_response)
-        prev_context = context
-        context = ""
+openai.organization = os.getenv("OPENAI_ORGANIZATION")
 
 
 def debug():
@@ -96,20 +45,6 @@ def debug():
     response = combined.generate(prompt)
 
     print("Final response\n\n", response)
-
-
-def set_seed(seed: int):
-    print(f"Setting random seed to {seed}")
-    # set_seed(rand)
-    numpy.random.seed(seed)
-    random.seed(seed)
-    torch.manual_seed(seed)
-    torch.cuda.manual_seed(seed)
-    torch.backends.cudnn.deterministic = True
-    torch.backends.cudnn.benchmark = False
-    transformers.set_seed(seed)
-    # Set a fixed value for the hash seed
-    os.environ["PYTHONHASHSEED"] = str(seed)
 
 
 def main():
@@ -141,13 +76,13 @@ def main():
         rephrase_model_info = ModelInfo("dev/echo", ModelSrc.DEV, None, None)
         # rephrase_model_info = ModelInfo("eugenesiow/bart-paraphrase", ModelSrc.HF_API, None, None)
 
-        primary = Primary(model_info)
+        main_model = Primary(model_info)
 
         secondary = Secondary(model_info, rephrase_model_info)
 
-        combined = Combined(primary, secondary)
+        main_model = Combined(main_model, secondary)
 
-        converse(combined, max_length=256)
+        converse(main_model, max_new_tokens=128)
 
     main_end = time.time()
     print(f"End main at {datetime.datetime.utcfromtimestamp(main_end)} UTC")

@@ -1,4 +1,5 @@
 import os
+import time
 from typing import Optional, Union
 
 import torch
@@ -8,6 +9,7 @@ from transformers.generation.utils import GenerateOutput
 from transformers.tokenization_utils_base import TextInput, EncodedInput, PreTokenizedInput
 
 from src.models.model_utils import SpoofTokenizer
+from src.logger import root_logger
 
 
 class HFModel(PreTrainedModel):
@@ -18,14 +20,22 @@ class HFModel(PreTrainedModel):
         self.tokenizer = HFTokenizer(model_name)
 
     @torch.no_grad()
-    def generate(self, inputs: Optional[torch.Tensor] = None, do_sample=True, temperature=0.7, max_length=None, **kwargs) -> Union[GenerateOutput, torch.LongTensor]:
+    def generate(self, inputs: Optional[torch.Tensor] = None, do_sample=True, temperature=0.7, max_new_tokens=None, **kwargs) -> Union[GenerateOutput, torch.LongTensor]:
         """Spoofs the pretrained model generation to make it fit for API generation"""
 
         responses = []
 
         for encoded_prompt in inputs:
             prompt = self.tokenizer.decode(encoded_prompt.tolist())
-            resp = self.api_model(inputs=prompt, params={"max_new_tokens": max_length, "return_full_text": False, "repetition_penalty": 1.5})
+            errors = 0
+            while errors < 5:
+                resp = self.api_model(inputs=prompt, params={"max_new_tokens": max_new_tokens, "return_full_text": False, "repetition_penalty": 1.5})
+                if 'error' in resp:
+                    errors += 1
+                    root_logger.warning("Error from huggingface API!")
+                    time.sleep(20)
+                else:
+                    break
             responses.append(self.tokenizer.encode(resp[0]["generated_text"]))
 
         return torch.LongTensor(responses)
