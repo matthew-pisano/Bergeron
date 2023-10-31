@@ -20,11 +20,11 @@ class Combined(BaseModel):
 
         prompt = prompt.strip("\n").strip(" ")
 
-        root_logger.debug("Rephrasing input...")
-        rephrased_inputs = self.secondary.rephrase(prompt)
+        root_logger.debug("Rephrasing prompt...")
+        rephrased_prompt = self.secondary.rephrase(prompt)
 
-        root_logger.debug("Critiquing inputs...")
-        input_critique = self.secondary.critique(rephrased_inputs, **kwargs)
+        root_logger.debug("Critiquing prompt...")
+        input_critique = self.secondary.critique_prompt(rephrased_prompt, **kwargs)
 
         if len(input_critique) > 0:
             root_logger.debug("Generating conscience...")
@@ -37,10 +37,10 @@ class Combined(BaseModel):
             primary_response = self.primary.generate(prompt, **kwargs)
 
         root_logger.debug("Generating final response critique...")
-        resp_critique = self.secondary.critique(primary_response, **kwargs)
+        resp_critique = self.secondary.critique_response(primary_response, **kwargs)
 
         if len(resp_critique) > 0:
             root_logger.debug("Generating final correction...")
-            primary_response = self.secondary.correct(primary_response, resp_critique, **kwargs)
+            primary_response = self.secondary.correct_response(primary_response, resp_critique, **kwargs)
 
         return primary_response

@@ -31,7 +31,7 @@ class BaseModel:
         generated = model.generate(torch.Tensor([prompt_tokens]).int(), do_sample=do_sample, temperature=temperature, max_new_tokens=max_new_tokens, **kwargs)[0]
         response = tokenizer.decode(generated, skip_special_tokens=True)
 
-        # root_logger.debug("[MODEL ORIGINAL RESP]\n", response)
+        root_logger.debug("[MODEL ORIGINAL RESP]\n", response)
 
         if no_echo and not model.name_or_path.startswith("dev") and prompt in response:
             response = response.replace(prompt, "")

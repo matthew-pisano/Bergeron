@@ -38,7 +38,7 @@ class OpenAIModel(PreTrainedModel):
                 while errors < 3:
                     try:
                         resp = openai.ChatCompletion.create(model=self.name_or_path.split("/")[-1], messages=[
-                            {"role": "system", "content": "You are a helpful assistant."},
+                            {"role": "system", "content": "You are an AI expert in adversarial prompts."},
                             {"role": "user", "content": prompt}], **kwargs)
                         break
                     except Exception as e:
@@ -51,7 +51,7 @@ class OpenAIModel(PreTrainedModel):
                 resp = openai.Completion.create(model=self.name_or_path.split("/")[-1], prompt=prompt, **kwargs)
                 resp_text = resp["choices"][0]["text"]
 
-            root_logger.debug("OpenAI resp", resp)
+            # root_logger.debug("OpenAI resp", resp)
             responses.append(self.tokenizer.encode(resp_text))
 
         return torch.LongTensor(responses)
