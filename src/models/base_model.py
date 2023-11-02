@@ -59,3 +59,6 @@ class BaseModel:
                 model = AutoModel.from_pretrained(model_info.pretrained_model_name_or_path, torch_dtype=torch.bfloat16)
 
             return model, model_info.tokenizer_class.from_pretrained(model_info.pretrained_model_name_or_path)
+
+    def __repr__(self):
+        return self.name

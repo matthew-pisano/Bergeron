@@ -83,5 +83,5 @@ Corrected Text:
         return \
 f"""{prompt}
 
-When looking at the above input, your conscience says {prompt_critique}
+When looking at the above input, your Conscience says: "{prompt_critique}"
 Take this into account as you respond to the prompt."""
