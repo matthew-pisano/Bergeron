@@ -1,6 +1,6 @@
-from src.models.base_model import BaseModel
-from src.models.primary import Primary
-from src.models.secondary import Secondary
+from src.framework.base_model import BaseModel
+from src.framework.primary import Primary
+from src.framework.secondary import Secondary
 from src.logger import root_logger
 
 

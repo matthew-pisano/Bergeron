@@ -27,6 +27,10 @@ class HFModel(PreTrainedModel):
 
         for encoded_prompt in inputs:
             prompt = self.tokenizer.decode(encoded_prompt.tolist())
+            char_limit = 300
+            if len(prompt) > char_limit:
+                root_logger.warning(f"Prompt given to Huggingface API is too long! {len(prompt)} > {char_limit}.  This prompt will be truncated.")
+                prompt = prompt[:char_limit//2] + prompt[-char_limit//2:]
             errors = 0
             while errors < 5:
                 resp = self.api_model(inputs=prompt, params={"max_new_tokens": max_new_tokens, "return_full_text": False, "repetition_penalty": 1.5})

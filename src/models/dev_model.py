@@ -2,7 +2,6 @@ import os
 from typing import Optional, Union
 
 import torch
-from huggingface_hub.inference_api import InferenceApi
 from transformers import PreTrainedModel, PreTrainedTokenizer
 from transformers.generation.utils import GenerateOutput
 from transformers.tokenization_utils_base import TextInput, EncodedInput, PreTokenizedInput

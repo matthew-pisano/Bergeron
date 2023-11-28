@@ -13,6 +13,9 @@ from src.models.model_utils import SpoofTokenizer
 
 class OpenAIModel(PreTrainedModel):
 
+    _seed: int = None
+    """The seed to use for API calls"""
+
     def __init__(self, model_name: str, **kwargs):
         self.name_or_path = model_name
         self.tokenizer = OpenAITokenizer(model_name)
@@ -39,7 +42,7 @@ class OpenAIModel(PreTrainedModel):
                     try:
                         resp = openai.ChatCompletion.create(model=self.name_or_path.split("/")[-1], messages=[
                             {"role": "system", "content": "You are an AI expert in adversarial prompts."},
-                            {"role": "user", "content": prompt}], **kwargs)
+                            {"role": "user", "content": prompt}], seed=self._seed, **kwargs)
                         break
                     except Exception as e:
                         root_logger.error(f"Error calling OpenAIAPI: '{e}'")
@@ -55,6 +58,15 @@ class OpenAIModel(PreTrainedModel):
             responses.append(self.tokenizer.encode(resp_text))
 
         return torch.LongTensor(responses)
+
+    @classmethod
+    def set_seed(cls, seed: int):
+        """Sets the seed to be used for API calls
+
+        Args:
+            seed: The new seed to use"""
+
+        cls._seed = seed
 
 
 class OpenAITokenizer(PreTrainedTokenizer):

@@ -1,16 +1,14 @@
 import os
-import random
 import subprocess
 import time
 from subprocess import Popen
 
-import numpy.random
 import openai
-import torch
 import transformers
 
 from src.logger import root_logger
-from src.models.base_model import BaseModel
+from src.framework.base_model import BaseModel
+from src.models.openai_model import OpenAIModel
 
 
 def use_fastchat_model(model_path: str):
@@ -29,14 +27,8 @@ def use_fastchat_model(model_path: str):
 
 def set_seed(seed: int):
     print(f"Setting random seed to {seed}")
-    # set_seed(rand)
-    numpy.random.seed(seed)
-    random.seed(seed)
-    torch.manual_seed(seed)
-    torch.cuda.manual_seed(seed)
-    torch.backends.cudnn.deterministic = True
-    torch.backends.cudnn.benchmark = False
     transformers.set_seed(seed)
+    OpenAIModel.set_seed(seed)
     # Set a fixed value for the hash seed
     os.environ["PYTHONHASHSEED"] = str(seed)
 

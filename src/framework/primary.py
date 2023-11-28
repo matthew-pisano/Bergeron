@@ -1,7 +1,4 @@
-import torch
-from transformers import AutoModelForCausalLM, AutoTokenizer, PreTrainedModel, PreTrainedTokenizer
-
-from src.models.base_model import BaseModel
+from src.framework.base_model import BaseModel
 from src.models.model_utils import ModelInfo
 
 

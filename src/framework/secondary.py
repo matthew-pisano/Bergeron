@@ -1,9 +1,5 @@
-import torch
-import transformers.utils
-from transformers import AutoModelForCausalLM, AutoTokenizer, PreTrainedModel, PreTrainedTokenizer
-
-from src.models.base_model import BaseModel
-from src.models.model_utils import ModelSrc, ModelInfo
+from src.framework.base_model import BaseModel
+from src.models.model_utils import ModelInfo
 
 
 class Secondary(BaseModel):
