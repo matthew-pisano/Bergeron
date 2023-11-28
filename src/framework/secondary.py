@@ -14,6 +14,11 @@ class Secondary(BaseModel):
     def name(self):
         return f"S({self.critique_model.name_or_path})"
 
+    def generate(self, prompt: str, **kwargs):
+        """Generates a response to the given prompt using the critique model"""
+
+        return self.generate_using(prompt, self.critique_model, self.critique_tokenizer, **kwargs)
+
     def rephrase(self, text: str, **kwargs):
         """Rephrase the given text"""
 

@@ -21,7 +21,7 @@ class OpenAIModel(PreTrainedModel):
         self.tokenizer = OpenAITokenizer(model_name)
 
     @torch.no_grad()
-    def generate(self, inputs: Optional[torch.Tensor] = None, **kwargs) -> Union[GenerateOutput, torch.LongTensor]:
+    def generate(self, inputs: Optional[torch.Tensor] = None, timeout=5, retries=2, **kwargs) -> Union[GenerateOutput, torch.LongTensor]:
         """Spoofs the pretrained model generation to make it fit for API generation"""
 
         if "max_new_tokens" in kwargs:
@@ -37,25 +37,23 @@ class OpenAIModel(PreTrainedModel):
             prompt = self.tokenizer.decode(encoded_prompt.tolist())
 
             if "gpt-" in self.name_or_path:
-                errors = 0
-                while errors < 3:
-                    try:
-                        resp = openai.ChatCompletion.create(model=self.name_or_path.split("/")[-1], messages=[
-                            {"role": "system", "content": "You are an AI expert in adversarial prompts."},
-                            {"role": "user", "content": prompt}], seed=self._seed, **kwargs)
-                        break
-                    except Exception as e:
-                        root_logger.error(f"Error calling OpenAIAPI: '{e}'")
-                        errors += 1
-                        time.sleep(30)
+                try:
+                    resp = openai.ChatCompletion.create(model=self.name_or_path.split("/")[-1], messages=[
+                        {"role": "system", "content": "You are an AI expert in adversarial prompts."},
+                        {"role": "user", "content": prompt}], seed=self._seed, request_timeout=timeout, **kwargs)
+                    resp_encoding = self.tokenizer.encode(resp["choices"][0]["message"]["content"])
+                except Exception as e:
+                    if retries <= 0:
+                        raise e
+                    root_logger.warning(f"Received error {e} from OpenAI API.  Retrying...")
+                    time.sleep(5)
+                    resp_encoding = self.generate(torch.Tensor([encoded_prompt]), timeout=timeout, retries=retries-1, **kwargs)[0]
 
-                resp_text = resp["choices"][0]["message"]["content"]
             else:
                 resp = openai.Completion.create(model=self.name_or_path.split("/")[-1], prompt=prompt, **kwargs)
-                resp_text = resp["choices"][0]["text"]
+                resp_encoding = self.tokenizer.encode(resp["choices"][0]["text"])
 
-            # root_logger.debug("OpenAI resp", resp)
-            responses.append(self.tokenizer.encode(resp_text))
+            responses.append(resp_encoding)
 
         return torch.LongTensor(responses)
 
