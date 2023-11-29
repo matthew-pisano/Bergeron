@@ -205,10 +205,10 @@ def test_generate_responses(target_model_name: str, prompt_types: list[str] = No
         raise ValueError(f"Unknown model name '{target_model_name}'")
     # model_name, model_src, model_class, tokenizer_class = "dev/human", ModelSrc.DEV, None, None
 
-    model_info = ModelInfo(model_name, model_src, model_class, tokenizer_class)
+    model_info = ModelInfo(model_name, model_src, model_class, tokenizer_class, model_task="conversational")
     main_model = Primary(model_info)
 
-    rephrase_model_info = ModelInfo("eugenesiow/bart-paraphrase", ModelSrc.HF_API, None, None)
+    rephrase_model_info = ModelInfo("eugenesiow/bart-paraphrase", ModelSrc.HF_API, None, None, model_task="summarization")
     secondary = Secondary(model_info, rephrase_model_info)
 
     main_model = Combined(main_model, secondary)

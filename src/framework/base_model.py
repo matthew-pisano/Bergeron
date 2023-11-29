@@ -48,7 +48,7 @@ class BaseModel:
         if model_info.model_src == ModelSrc.OPENAI_API:
             return OpenAIModel(model_info.pretrained_model_name_or_path), OpenAITokenizer(model_info.pretrained_model_name_or_path)
         elif model_info.model_src == ModelSrc.HF_API:
-            return HFModel(model_info.pretrained_model_name_or_path), HFTokenizer(model_info.pretrained_model_name_or_path)
+            return HFModel(model_info.pretrained_model_name_or_path, model_info.model_task), HFTokenizer(model_info.pretrained_model_name_or_path)
         elif model_info.model_src == ModelSrc.DEV:
             return DevModel(model_info.pretrained_model_name_or_path), DevTokenizer(model_info.pretrained_model_name_or_path)
         else:

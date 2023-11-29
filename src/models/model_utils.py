@@ -15,11 +15,15 @@ class ModelSrc(Enum):
 
 class ModelInfo:
 
-    def __init__(self, pretrained_model_name_or_path: str, model_src: ModelSrc, model_class: PreTrainedModel | None = AutoModelForCausalLM, tokenizer_class: PreTrainedTokenizer | None = AutoTokenizer):
+    def __init__(self, pretrained_model_name_or_path: str, model_src: ModelSrc, model_class: PreTrainedModel | None = AutoModelForCausalLM, tokenizer_class: PreTrainedTokenizer | None = AutoTokenizer, model_task: str = None):
         self.pretrained_model_name_or_path = pretrained_model_name_or_path
         self.model_src = model_src
         self.model_class = model_class
         self.tokenizer_class = tokenizer_class
+        self.model_task = model_task
+
+        if self.model_src == ModelSrc.HF_API and self.model_task is None:
+            raise ValueError("A model task is required to use HuggingFace models")
 
     def as_dict(self):
         return vars(self)

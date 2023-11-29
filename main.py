@@ -31,15 +31,16 @@ def debug():
     # model_name, model_src, model_class, tokenizer_class = "meta-llama/Llama-2-7b-chat-hf", ModelSrc.LOCAL, LlamaForCausalLM, LlamaTokenizer
     # model_name, model_src, model_class, tokenizer_class = "dev/human", ModelSrc.DEV, None, None
 
-    model_info = ModelInfo(model_name, model_src, model_class, tokenizer_class)
+    model_info = ModelInfo(model_name, model_src, model_class, tokenizer_class, model_task="conversational")
 
     primary = Primary(model_info)
-    rephrase_model_info = ModelInfo("eugenesiow/bart-paraphrase", ModelSrc.HF_API, None, None)
+    rephrase_model_info = ModelInfo("eugenesiow/bart-paraphrase", ModelSrc.HF_API, None, None, model_task="summarization")
     secondary = Secondary(model_info, rephrase_model_info)
     combined = Combined(primary, secondary)
 
     rephrase_model_info = ModelInfo("dev/echo", ModelSrc.DEV, None, None)
-    non_reph_combined = Combined(primary, secondary)
+    non_reph_secondary = Secondary(model_info, rephrase_model_info)
+    non_reph_combined = Combined(primary, non_reph_secondary)
 
     response = combined.generate(prompt)
     no_reph_response = non_reph_combined.generate(prompt)
@@ -65,17 +66,17 @@ def main():
         debug()
     elif args[0] == "converse":
         root_logger.set_level(root_logger.DEBUG)
-        model_name, model_src, model_class, tokenizer_class = "dev/human", ModelSrc.DEV, None, None
+        # model_name, model_src, model_class, tokenizer_class = "dev/human", ModelSrc.DEV, None, None
         # model_name, model_src, model_class, tokenizer_class = "mistralai/Mistral-7B-Instruct-v0.1", ModelSrc.HF_API, AutoModelForCausalLM, AutoTokenizer
         # model_name, model_src, model_class, tokenizer_class = "mistralai/Mistral-7B-v0.1", ModelSrc.HF_API, AutoModelForCausalLM, AutoTokenizer
         # model_name, model_src, model_class, tokenizer_class = "meta-llama/Llama-2-7b-chat-hf", ModelSrc.LOCAL, LlamaForCausalLM, LlamaTokenizer
         # use_fastchat_model(model_name)
-        # model_name, model_src, model_class, tokenizer_class = "gpt-3.5-turbo", ModelSrc.OPENAI_API, LlamaForCausalLM, LlamaTokenizer
+        model_name, model_src, model_class, tokenizer_class = "gpt-3.5-turbo", ModelSrc.OPENAI_API, None, None
 
         model_info = ModelInfo(model_name, model_src, model_class, tokenizer_class)
 
-        rephrase_model_info = ModelInfo("dev/echo", ModelSrc.DEV, None, None)
-        # rephrase_model_info = ModelInfo("eugenesiow/bart-paraphrase", ModelSrc.HF_API, None, None)
+        # rephrase_model_info = ModelInfo("dev/echo", ModelSrc.DEV, None, None)
+        rephrase_model_info = ModelInfo("eugenesiow/bart-paraphrase", ModelSrc.HF_API, None, None, model_task="summarization")
 
         main_model = Primary(model_info)
 
