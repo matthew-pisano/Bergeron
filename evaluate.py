@@ -45,31 +45,28 @@ Evaluation:
 """
 
 
-def load_prompts(prompts_folder: str, prompt_types: list[str] = None):
+def load_prompts(prompts_folder_path: str, prompt_types: list[str] = None):
     """Load prompt dataset from all files in the given folder"""
 
-    prompt_files = os.listdir(prompts_folder)
+    prompt_files = os.listdir(prompts_folder_path)
 
     all_prompts = {}
     for file_name in prompt_files:
         prompt_type = file_name.split(".")[0]
         if prompt_types is not None and prompt_type in prompt_types:
-            with open(prompts_folder.rstrip("/")+"/"+file_name, "r") as file:
+            with open(prompts_folder_path.rstrip("/") + "/" + file_name, "r") as file:
                 file_prompts = file.read().split("<prompt>")
                 all_prompts[prompt_type] = [prompt for prompt in file_prompts if len(prompt) > 3]
 
     return all_prompts
 
 
-def generate_responses(model: BaseModel, prompts: dict[str, list[str]], out_dir: str, repetitions=1, do_sample=True, temperature=0.7, max_new_tokens=None, **kwargs):
-    """Generate responses for each of the given prompts and save them to a file"""
+def generate_responses(model: BaseModel, prompts: dict[str, list[str]], repetitions=1, do_sample=True, temperature=0.7, max_new_tokens=None, **kwargs):
 
-    root_logger.info(f"Generating responses from {model.name}")
     responses = {key: [] for key in prompts}
 
     num_prompts = sum([len(prompt_chunk) for prompt_chunk in prompts.values()])
     pbar = tqdm.tqdm(total=num_prompts)
-
     for prompt_type, prompt_chunk in prompts.items():
         for prompt in prompt_chunk:
             pair = {"prompt": prompt, "responses": []}
@@ -87,8 +84,16 @@ def generate_responses(model: BaseModel, prompts: dict[str, list[str]], out_dir:
                         break
             responses[prompt_type].append(pair)
             pbar.update(1)
-
     pbar.close()
+
+    return responses
+
+
+def generate_and_save_responses(model: BaseModel, prompts: dict[str, list[str]], out_dir: str, repetitions=1, do_sample=True, temperature=0.7, max_new_tokens=None, **kwargs):
+    """Generate responses for each of the given prompts and save them to a file"""
+
+    root_logger.info(f"Generating responses from {model.name}")
+    responses = generate_responses(model, prompts, repetitions=repetitions, do_sample=do_sample, temperature=temperature, max_new_tokens=max_new_tokens, **kwargs)
 
     out_file = out_dir.rstrip("/")+f"/{model.name.replace('/', '')}.json"
     full_resps = responses
@@ -132,24 +137,12 @@ def is_alignment_failure(response: str, eval_model: BaseModel, do_sample=True, t
     return False
 
 
-def evaluate_responses(eval_model: BaseModel, in_file: str, prompt_types: list[str] = None, **kwargs):
-    """Evaluates the responses contained within the given file to instances of alignment failure.  Results are saved to a seperate file"""
-
-    with open(in_file, "r") as file:
-        loaded = json.loads(file.read())
-        model_name = loaded["model"]
-        responses = loaded["responses"]
-
-        if prompt_types is not None:
-            responses = {k: v for k, v in responses.items() if k in prompt_types}
-
-    root_logger.info(f"Evaluating responses from {model_name}")
+def evaluate_responses(eval_model: BaseModel, responses: dict, **kwargs):
 
     stats = {"combined": {"total": 0, "failures": 0}}
 
     num_prompts = sum([len(chunk) for chunk in responses.values()])
     pbar = tqdm.tqdm(total=num_prompts)
-
     for prompt_type, type_pairs in responses.items():
         stats[prompt_type] = {"total": 0, "failures": 0}
         for pair in type_pairs:
@@ -170,8 +163,25 @@ def evaluate_responses(eval_model: BaseModel, in_file: str, prompt_types: list[s
                 stats["combined"]["failures"] += 1
 
             pbar.update(1)
-
     pbar.close()
+
+    return stats
+
+
+def evaluate_and_save_responses(eval_model: BaseModel, in_file: str, prompt_types: list[str] = None, **kwargs):
+    """Evaluates the responses contained within the given file to instances of alignment failure.  Results are saved to a seperate file"""
+
+    with open(in_file, "r") as file:
+        loaded = json.loads(file.read())
+        model_name = loaded["model"]
+        responses = loaded["responses"]
+
+        if prompt_types is not None:
+            responses = {k: v for k, v in responses.items() if k in prompt_types}
+
+    root_logger.info(f"Evaluating responses from {model_name}")
+
+    stats = evaluate_responses(eval_model, responses)
 
     for stat_type, stat in stats.items():
         if stat["total"] > 0:
@@ -193,7 +203,7 @@ def evaluate_responses(eval_model: BaseModel, in_file: str, prompt_types: list[s
         file.write(json.dumps(full_stats))
 
 
-def test_generate_responses(target_model_name: str, prompt_types: list[str] = None):
+def test_generate_responses(target_model_name: str, prompt_class: str, prompt_types: list[str] = None):
     if target_model_name == "meta-llamaLlama-2-7b-chat-hf":
         model_name, model_src, model_class, tokenizer_class = "meta-llama/Llama-2-7b-chat-hf", ModelSrc.OPENAI_API, LlamaForCausalLM, LlamaTokenizer
         use_fastchat_model(model_name)
@@ -213,29 +223,39 @@ def test_generate_responses(target_model_name: str, prompt_types: list[str] = No
 
     main_model = Combined(main_model, secondary)
 
-    prompts = load_prompts("data/adversarial", prompt_types=prompt_types)
-    generate_responses(main_model, prompts, "data/responses", repetitions=1, max_new_tokens=150)
+    prompts = load_prompts(f"data/prompts/{prompt_class}", prompt_types=prompt_types)
+    generate_and_save_responses(main_model, prompts, f"data/responses/{prompt_class}", repetitions=1, max_new_tokens=150)
 
 
-def test_evaluate_responses(resp_file: str, prompt_types: list[str]):
+def test_evaluate_responses(resp_file: str, prompt_types: list[str] = None):
     model_name, model_src, model_class, tokenizer_class = "gpt-4", ModelSrc.OPENAI_API, None, None
     model_info = ModelInfo(model_name, model_src, model_class, tokenizer_class)
 
     main_model = Primary(model_info)
-    evaluate_responses(main_model, resp_file, max_new_tokens=50, prompt_types=prompt_types)
+    evaluate_and_save_responses(main_model, resp_file, max_new_tokens=50, prompt_types=prompt_types)
 
 
 if __name__ == "__main__":
     root_logger.set_level(root_logger.DEBUG)
-    resp_mode = False
+
+    # Response mode
+    action = "respond"
+    # action = "evaluate"
 
     # target_model = "gpt-3.5-turbo"
     target_model = "mistralaiMistral-7B-v0.1"
     # target_model = "meta-llamaLlama-2-7b-chat-hf"
 
-    if resp_mode:
-        test_generate_responses(target_model, prompt_types=["aim_prompts", "hyp_prompts", "rud_prompts"])
+    # Prompt class
+    prompt_class = "adversarial"
+    # prompt_class = "mundane"
+
+    # Framework model
+    framework_model = f"P({target_model})"
+    # framework_model = f"C({target_model}, {target_model})"
+
+    if action == "respond":
+        test_generate_responses(target_model, prompt_class)
     else:
-        # resp_file = f"data/responses/P({target_model}).json"
-        resp_file = f"data/responses/C({target_model}, {target_model}).json"
-        test_evaluate_responses(resp_file, prompt_types=["aim_prompts", "hyp_prompts", "rud_prompts"])
+        resp_file = f"data/responses/{prompt_class}/{framework_model}.json"
+        test_evaluate_responses(resp_file)
