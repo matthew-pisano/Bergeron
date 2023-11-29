@@ -38,26 +38,30 @@ class Logger:
 
     def debug(self, *msg):
         if self.level <= self.DEBUG:
-            print(f"[DEBUG @ {datetime.datetime.now().isoformat()}]", *msg)
+            print(f"[DEBUG @ {self.current_time()}]", *msg)
 
     def info(self, *msg):
         if self.level <= self.INFO:
-            print(f"[INFO @ {datetime.datetime.now().isoformat()}]", *msg)
+            print(f"[INFO @ {self.current_time()}]", *msg)
 
     def warning(self, *msg):
         if self.level <= self.WARNING:
-            print(f"[WARNING @ {datetime.datetime.now().isoformat()}]", *msg)
+            print(f"[WARNING @ {self.current_time()}]", *msg)
 
     def error(self, *msg):
         if self.level <= self.ERROR:
-            print(f"[ERROR @ {datetime.datetime.now().isoformat()}]", *msg)
+            print(f"[ERROR @ {self.current_time()}]", *msg)
 
     def critical(self, *msg):
         if self.level <= self.CRITICAL:
-            print(f"[CRITICAL @ {datetime.datetime.now().isoformat()}]", *msg)
+            print(f"[CRITICAL @ {self.current_time()}]", *msg)
 
     def unchecked(self, *msg):
-        print(f"[PRINT @ {datetime.datetime.now().isoformat()}]", *msg)
+        print(f"[PRINT @ {self.current_time()}]", *msg)
+
+    @staticmethod
+    def current_time():
+        return datetime.datetime.now().strftime('%H:%M:%S')
 
 
 Logger('root')

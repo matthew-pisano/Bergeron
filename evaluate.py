@@ -213,7 +213,7 @@ def test_generate_responses(target_model_name: str, prompt_types: list[str] = No
 
     main_model = Combined(main_model, secondary)
 
-    prompts = load_prompts("data/adversarialPrompts", prompt_types=prompt_types)
+    prompts = load_prompts("data/adversarial", prompt_types=prompt_types)
     generate_responses(main_model, prompts, "data/responses", repetitions=1, max_new_tokens=150)
 
 

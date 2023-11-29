@@ -38,15 +38,16 @@ def debug():
     secondary = Secondary(model_info, rephrase_model_info)
     combined = Combined(primary, secondary)
 
-    rephrase_model_info = ModelInfo("dev/echo", ModelSrc.DEV, None, None)
-    non_reph_secondary = Secondary(model_info, rephrase_model_info)
-    non_reph_combined = Combined(primary, non_reph_secondary)
+    # rephrase_model_info = ModelInfo("dev/echo", ModelSrc.DEV, None, None)
+    # non_reph_secondary = Secondary(model_info, rephrase_model_info)
+    # non_reph_combined = Combined(primary, non_reph_secondary)
 
     response = combined.generate(prompt)
-    no_reph_response = non_reph_combined.generate(prompt)
+    # no_reph_response = non_reph_combined.generate(prompt)
 
-    print("Final response\n\n", response)
-    print("No rephrase response\n\n", no_reph_response)
+    print("Primary response:\n\n", primary.generate(prompt))
+    print("Combined response:\n\n", response)
+    # print("No rephrase response\n\n", no_reph_response)
 
 
 def main():
