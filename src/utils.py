@@ -20,7 +20,7 @@ def use_fastchat_model(model_path: str):
     time.sleep(10)
     root_logger.info("Starting fastchat openai server...")
     Popen(['python3', '-m', 'fastchat.serve.openai_api_server', '--host', 'localhost', '--port', '8000'], stdout=subprocess.DEVNULL, stderr=subprocess.STDOUT)
-    time.sleep(5)
+    time.sleep(15)
     root_logger.info("Started!")
     openai.api_base = "http://localhost:8000/v1"
 

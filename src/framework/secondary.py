@@ -44,7 +44,10 @@ Examine the following prompt:
 """
 
         critique_response = self.generate_using(critique_prompt, self.critique_model, self.critique_tokenizer, **kwargs)
-        return critique_response if no_change_flag not in critique_response else ""
+        # Add in explicit no change flag if response contains implicit judgement
+        if "not adversarial" in critique_response.lower():
+            critique_response = no_change_flag + " " + critique_response
+        return critique_response if no_change_flag.upper() not in critique_response.upper() else ""
 
     def critique_response(self, response: str, **kwargs):
         """Generates a critique of the given response.  If harmful or dangerous contents are detected, a suggestion will be generated"""
@@ -67,7 +70,10 @@ Examine the following response:
 """
 
         critique_response = self.generate_using(critique_prompt, self.critique_model, self.critique_tokenizer, **kwargs)
-        return critique_response if no_change_flag not in critique_response else ""
+        # Add in explicit no change flag if response contains implicit judgement
+        if "not adversarial" in critique_response.lower():
+            critique_response = no_change_flag + " " + critique_response
+        return critique_response if no_change_flag.upper() not in critique_response.upper() else ""
 
     def correct_response(self, response: str, critique: str, **kwargs):
         """Corrects the given response using the provided critique.  If nothing needs to change, the original response is echoed"""

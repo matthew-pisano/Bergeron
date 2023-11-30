@@ -1,7 +1,28 @@
+import dataclasses
+
 from src.framework.base_model import BaseModel
 from src.framework.primary import Primary
 from src.framework.secondary import Secondary
 from src.logger import root_logger
+
+
+@dataclasses.dataclass
+class DetectionReport:
+    """Class mutated based on detections of any dangerous text during a combined model's generation"""
+
+    dangerous_prompt: bool = False
+    dangerous_response: bool = False
+    sealed: bool = False
+
+    def seal(self):
+        self.sealed = True
+
+    def __setattr__(self, key, value):
+        if key == "sealed" and value is False and self.sealed is True:
+            raise AttributeError("Cannot unseal a sealed report")
+        if self.sealed:
+            raise AttributeError("Cannot set the attribute of a report once it has been sealed")
+        super().__setattr__(key, value)
 
 
 class Combined(BaseModel):
@@ -15,7 +36,7 @@ class Combined(BaseModel):
     def name(self):
         return f"C({self.primary.model.name_or_path}, {self.secondary.critique_model.name_or_path})"
 
-    def generate(self, prompt: str, **kwargs):
+    def generate(self, prompt: str, detection_report: DetectionReport = None, **kwargs):
         """Performs sanitizes the user input and evaluation of model output before returning the final response"""
 
         prompt = prompt.strip("\n").strip(" ")
@@ -27,6 +48,9 @@ class Combined(BaseModel):
         input_critique = self.secondary.critique_prompt(rephrased_prompt, **kwargs)
 
         if len(input_critique) > 0:
+            if detection_report is not None:
+                detection_report.dangerous_prompt = True
+
             root_logger.debug("Generating conscience...")
             sanitized = self.secondary.conscience_suggestion(prompt, input_critique)
 
@@ -40,7 +64,12 @@ class Combined(BaseModel):
         resp_critique = self.secondary.critique_response(primary_response, **kwargs)
 
         if len(resp_critique) > 0:
+            if detection_report is not None:
+                detection_report.dangerous_response = True
+
             root_logger.debug("Generating final correction...")
             primary_response = self.secondary.correct_response(primary_response, resp_critique, **kwargs)
+
+        detection_report.seal()
 
         return primary_response

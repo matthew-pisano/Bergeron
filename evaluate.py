@@ -1,3 +1,4 @@
+import dataclasses
 import json
 import os
 
@@ -7,7 +8,7 @@ from dotenv import load_dotenv
 from transformers import LlamaForCausalLM, LlamaTokenizer
 
 from src.framework.base_model import BaseModel
-from src.framework.combined import Combined
+from src.framework.combined import Combined, DetectionReport
 from src.models.model_utils import ModelSrc, ModelInfo
 from src.framework.primary import Primary
 from src.framework.secondary import Secondary
@@ -53,7 +54,7 @@ def load_prompts(prompts_folder_path: str, prompt_types: list[str] = None):
     all_prompts = {}
     for file_name in prompt_files:
         prompt_type = file_name.split(".")[0]
-        if prompt_types is not None and prompt_type in prompt_types:
+        if prompt_types is None or prompt_type in prompt_types:
             with open(prompts_folder_path.rstrip("/") + "/" + file_name, "r") as file:
                 file_prompts = file.read().split("<prompt>")
                 all_prompts[prompt_type] = [prompt for prompt in file_prompts if len(prompt) > 3]
@@ -69,20 +70,28 @@ def generate_responses(model: BaseModel, prompts: dict[str, list[str]], repetiti
     pbar = tqdm.tqdm(total=num_prompts)
     for prompt_type, prompt_chunk in prompts.items():
         for prompt in prompt_chunk:
-            pair = {"prompt": prompt, "responses": []}
+            prompt_stats = {"prompt": prompt, "responses": [], "detection_reports": []}
             i = 0
             blank_resps = 0
             while i < repetitions:
+
+                report = DetectionReport()
+                kwargs = {}
+                if isinstance(model, Combined):
+                    kwargs = {"detection_report": report}
+
                 resp = model.generate(prompt, do_sample=do_sample, temperature=temperature, max_new_tokens=max_new_tokens, **kwargs)
+
                 if len(resp) > 0:
-                    pair["responses"].append(resp)
+                    prompt_stats["responses"].append(resp)
+                    prompt_stats["detection_reports"].append(dataclasses.asdict(report))
                     i += 1
                 else:
                     root_logger.warning("Blank response to!", prompt)
                     blank_resps += 1
                     if blank_resps > 3:
                         break
-            responses[prompt_type].append(pair)
+            responses[prompt_type].append(prompt_stats)
             pbar.update(1)
     pbar.close()
 
@@ -137,19 +146,19 @@ def is_alignment_failure(response: str, eval_model: BaseModel, do_sample=True, t
     return False
 
 
-def evaluate_responses(eval_model: BaseModel, responses: dict, **kwargs):
+def detect_alignment_failures(eval_model: BaseModel, responses: dict, **kwargs):
 
     stats = {"combined": {"total": 0, "failures": 0}}
 
     num_prompts = sum([len(chunk) for chunk in responses.values()])
     pbar = tqdm.tqdm(total=num_prompts)
-    for prompt_type, type_pairs in responses.items():
+    for prompt_type, prompt_stats in responses.items():
         stats[prompt_type] = {"total": 0, "failures": 0}
-        for pair in type_pairs:
+        for prompt_stat in prompt_stats:
             is_failure = False
 
             # Checks to see if any of the response samples is a failure.  If even one is a failure, the prompt defense is marked as failed
-            for resp in pair["responses"]:
+            for resp in prompt_stat["responses"]:
                 is_failure = is_alignment_failure(resp, eval_model, **kwargs)
                 # Break to avoid unnecessary calls to eval LLM
                 if is_failure:
@@ -168,7 +177,37 @@ def evaluate_responses(eval_model: BaseModel, responses: dict, **kwargs):
     return stats
 
 
-def evaluate_and_save_responses(eval_model: BaseModel, in_file: str, prompt_types: list[str] = None, **kwargs):
+def detect_false_failure_detections(responses: dict):
+    stats = {"combined": {"total": 0, "false_detections": 0}}
+
+    num_prompts = sum([len(chunk) for chunk in responses.values()])
+    pbar = tqdm.tqdm(total=num_prompts)
+    for prompt_type, prompt_stats in responses.items():
+        stats[prompt_type] = {"total": 0, "false_detections": 0}
+        for prompt_stat in prompt_stats:
+            is_false_detection = False
+
+            # Checks to see if any of the response samples is a failure.  If even one is a failure, the prompt defense is marked as failed
+            for report in prompt_stat["detection_reports"]:
+                is_false_detection = report["dangerous_prompt"]
+                # Break to avoid unnecessary calls to eval LLM
+                if is_false_detection:
+                    break
+
+            stats[prompt_type]["total"] += 1
+            stats["combined"]["total"] += 1
+
+            if is_false_detection:
+                stats[prompt_type]["false_detections"] += 1
+                stats["combined"]["false_detections"] += 1
+
+            pbar.update(1)
+    pbar.close()
+
+    return stats
+
+
+def eval_responses_and_save(in_file: str, prompt_class: str, eval_model: BaseModel = None, prompt_types: list[str] = None, **kwargs):
     """Evaluates the responses contained within the given file to instances of alignment failure.  Results are saved to a seperate file"""
 
     with open(in_file, "r") as file:
@@ -181,11 +220,16 @@ def evaluate_and_save_responses(eval_model: BaseModel, in_file: str, prompt_type
 
     root_logger.info(f"Evaluating responses from {model_name}")
 
-    stats = evaluate_responses(eval_model, responses)
+    if prompt_class == "adversarial":
+        stats = detect_alignment_failures(eval_model, responses, **kwargs)
+        eval_key = "failures"
+    else:
+        stats = detect_false_failure_detections(responses)
+        eval_key = "false_detections"
 
     for stat_type, stat in stats.items():
         if stat["total"] > 0:
-            root_logger.unchecked(model_name, stat_type, "total:", stat["total"], ", failures:", stat["failures"], ", failure rate: ", round(stat["failures"]/stat["total"]*100, 2))
+            root_logger.unchecked(model_name, stat_type, "total:", stat["total"], f", {eval_key}:", stat[eval_key], f", {eval_key} rate: ", round(stat[eval_key]/stat["total"]*100, 2))
 
     out_file = in_file.replace("responses", "evaluations").replace(".json", "")+"-eval.json"
     full_stats = stats
@@ -196,14 +240,14 @@ def evaluate_and_save_responses(eval_model: BaseModel, in_file: str, prompt_type
             # Copy new values over to old
             for key in stats:
                 full_stats[key] = stats[key]
-            full_stats["combined"] = {"failures": sum([v["failures"] for k, v in full_stats.items() if k != "combined"]),
+            full_stats["combined"] = {eval_key: sum([v[eval_key] for k, v in full_stats.items() if k != "combined"]),
                                       "total": sum([v["total"] for k, v in full_stats.items() if k != "combined"])}
 
     with open(out_file, "w") as file:
         file.write(json.dumps(full_stats))
 
 
-def test_generate_responses(target_model_name: str, prompt_class: str, prompt_types: list[str] = None):
+def model_info_from_name(target_model_name: str):
     if target_model_name == "meta-llamaLlama-2-7b-chat-hf":
         model_name, model_src, model_class, tokenizer_class = "meta-llama/Llama-2-7b-chat-hf", ModelSrc.OPENAI_API, LlamaForCausalLM, LlamaTokenizer
         use_fastchat_model(model_name)
@@ -213,49 +257,57 @@ def test_generate_responses(target_model_name: str, prompt_class: str, prompt_ty
         model_name, model_src, model_class, tokenizer_class = target_model_name, ModelSrc.OPENAI_API, None, None
     else:
         raise ValueError(f"Unknown model name '{target_model_name}'")
+
+    return model_name, model_src, model_class, tokenizer_class
+
+
+def test_generate_responses(target_model_name: str, framework: str, prompt_class: str, prompt_types: list[str] = None):
+    model_name, model_src, model_class, tokenizer_class = model_info_from_name(target_model_name)
     # model_name, model_src, model_class, tokenizer_class = "dev/human", ModelSrc.DEV, None, None
 
     model_info = ModelInfo(model_name, model_src, model_class, tokenizer_class, model_task="conversational")
     main_model = Primary(model_info)
 
-    rephrase_model_info = ModelInfo("eugenesiow/bart-paraphrase", ModelSrc.HF_API, None, None, model_task="summarization")
-    secondary = Secondary(model_info, rephrase_model_info)
-
-    main_model = Combined(main_model, secondary)
+    if framework.lower() == "c":
+        rephrase_model_info = ModelInfo("dev/echo", ModelSrc.DEV, None, None)
+        # rephrase_model_info = ModelInfo("eugenesiow/bart-paraphrase", ModelSrc.HF_API, None, None, model_task="summarization")
+        secondary = Secondary(model_info, rephrase_model_info)
+        main_model = Combined(main_model, secondary)
 
     prompts = load_prompts(f"data/prompts/{prompt_class}", prompt_types=prompt_types)
     generate_and_save_responses(main_model, prompts, f"data/responses/{prompt_class}", repetitions=1, max_new_tokens=150)
 
 
-def test_evaluate_responses(resp_file: str, prompt_types: list[str] = None):
+def test_evaluate_responses(framework_model: str, prompt_class: str, prompt_types: list[str] = None):
     model_name, model_src, model_class, tokenizer_class = "gpt-4", ModelSrc.OPENAI_API, None, None
     model_info = ModelInfo(model_name, model_src, model_class, tokenizer_class)
 
-    main_model = Primary(model_info)
-    evaluate_and_save_responses(main_model, resp_file, max_new_tokens=50, prompt_types=prompt_types)
+    main_model = Primary(model_info) if prompt_class == "adversarial" else None
+
+    resp_file = f"data/responses/{prompt_class}/{framework_model}.json"
+    eval_responses_and_save(resp_file, prompt_class, eval_model=main_model, max_new_tokens=50, prompt_types=prompt_types)
 
 
 if __name__ == "__main__":
     root_logger.set_level(root_logger.DEBUG)
 
     # Response mode
-    action = "respond"
-    # action = "evaluate"
+    # action = "respond"
+    action = "evaluate"
 
-    # target_model = "gpt-3.5-turbo"
-    target_model = "mistralaiMistral-7B-v0.1"
+    target_model = "gpt-3.5-turbo"
+    # target_model = "mistralaiMistral-7B-v0.1"
     # target_model = "meta-llamaLlama-2-7b-chat-hf"
 
     # Prompt class
-    prompt_class = "adversarial"
-    # prompt_class = "mundane"
+    # prompt_class = "adversarial"
+    prompt_class = "mundane"
 
     # Framework model
-    framework_model = f"P({target_model})"
-    # framework_model = f"C({target_model}, {target_model})"
+    # framework_model = f"P({target_model})"
+    framework_model = f"C({target_model}, {target_model})"
 
     if action == "respond":
-        test_generate_responses(target_model, prompt_class)
+        test_generate_responses(target_model, framework_model[0], prompt_class)
     else:
-        resp_file = f"data/responses/{prompt_class}/{framework_model}.json"
-        test_evaluate_responses(resp_file)
+        test_evaluate_responses(framework_model, prompt_class)
