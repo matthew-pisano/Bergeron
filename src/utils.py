@@ -5,9 +5,11 @@ from subprocess import Popen
 
 import openai
 import transformers
+from transformers import PreTrainedModel, PreTrainedTokenizer
 
 from src.logger import root_logger
 from src.framework.base_model import BaseModel
+from src.models.model_utils import ModelSrc
 from src.models.openai_model import OpenAIModel
 
 
@@ -23,7 +25,6 @@ def use_fastchat_model(model_path: str):
     time.sleep(15)
     root_logger.info("Started!")
     openai.api_base = "http://localhost:8000/v1"
-
 
 def set_seed(seed: int):
     print(f"Setting random seed to {seed}")
@@ -64,3 +65,16 @@ def converse(model: BaseModel, do_sample=True, temperature=0.7, max_new_tokens=N
         prev_context = context
         context = ""
 
+
+def model_info_from_name(target_model_name: str) -> tuple[str, ModelSrc, PreTrainedModel | None, PreTrainedTokenizer | None]:
+    if target_model_name.startswith("dev/"):
+        model_name, model_src, model_class, tokenizer_class = target_model_name, ModelSrc.DEV, None, None
+    elif target_model_name.startswith("meta-llama/") or target_model_name.startswith("mistralai/"):
+        model_name, model_src, model_class, tokenizer_class = target_model_name, ModelSrc.OPENAI_API, None, None
+        use_fastchat_model(model_name)
+    elif "gpt-" in target_model_name:
+        model_name, model_src, model_class, tokenizer_class = target_model_name, ModelSrc.OPENAI_API, None, None
+    else:
+        raise ValueError(f"Unknown model name '{target_model_name}'")
+
+    return model_name, model_src, model_class, tokenizer_class

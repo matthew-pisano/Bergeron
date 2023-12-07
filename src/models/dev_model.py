@@ -21,7 +21,7 @@ class DevModel(PreTrainedModel):
         self.tokenizer = DevTokenizer(model_name)
 
     @torch.no_grad()
-    def generate(self, inputs: Optional[torch.Tensor] = None, **kwargs) -> Union[GenerateOutput, torch.LongTensor]:
+    def generate(self, inputs: Optional[torch.Tensor] = None, **kwargs) -> GenerateOutput | torch.LongTensor:
         """Spoofs the pretrained model generation to make it fit for API generation"""
 
         responses = []
@@ -67,12 +67,12 @@ class DevTokenizer(PreTrainedTokenizer):
     def __init__(self, tokenizer_name: str, **kwargs):
         self.tokenizer_name = tokenizer_name
 
-    def encode(self, text: Union[TextInput, PreTokenizedInput, EncodedInput], **kwargs):
+    def encode(self, text: TextInput | PreTokenizedInput | EncodedInput, **kwargs):
         """Spoofs the pretrained tokenizer's encoding by converting characters to integers"""
 
         return SpoofTokenizer.char_encode(text, **kwargs)
 
-    def decode(self, token_ids: Union[int, list[int]], **kwargs):
+    def decode(self, token_ids: int | list[int], **kwargs):
         """Spoofs the pretrained tokenizer's decoding by converting integers to characters"""
 
         return SpoofTokenizer.char_decode(token_ids, **kwargs)

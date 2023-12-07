@@ -21,7 +21,7 @@ class HFModel(PreTrainedModel):
         self.tokenizer = HFTokenizer(model_name)
 
     @torch.no_grad()
-    def generate(self, inputs: Optional[torch.Tensor] = None, do_sample=True, temperature=0.7, max_new_tokens=None, timeout=30, retries=2, **kwargs) -> Union[GenerateOutput, torch.LongTensor]:
+    def generate(self, inputs: Optional[torch.Tensor] = None, do_sample=True, temperature=0.7, max_new_tokens=None, timeout=30, retries=2, **kwargs) -> GenerateOutput | torch.LongTensor:
         """Spoofs the pretrained model generation to make it fit for API generation"""
 
         inference_client = InferenceClient(model=self.name_or_path, token=os.environ.get("HF_API_KEY"), timeout=timeout)
@@ -36,7 +36,7 @@ class HFModel(PreTrainedModel):
 
         for encoded_prompt in inputs:
             prompt = self.tokenizer.decode(encoded_prompt.tolist())
-            char_limit = 300
+            char_limit = 450
             if len(prompt) > char_limit:
                 root_logger.warning(f"Prompt given to Huggingface API is too long! {len(prompt)} > {char_limit}.  This prompt will be truncated.")
                 prompt = prompt[:char_limit//2] + prompt[-char_limit//2:]
@@ -66,12 +66,12 @@ class HFTokenizer(PreTrainedTokenizer):
     def __init__(self, tokenizer_name: str, **kwargs):
         self.tokenizer_name = tokenizer_name
 
-    def encode(self, text: Union[TextInput, PreTokenizedInput, EncodedInput], **kwargs):
+    def encode(self, text: TextInput | PreTokenizedInput | EncodedInput, **kwargs):
         """Spoofs the pretrained tokenizer's encoding by converting characters to integers"""
 
         return SpoofTokenizer.char_encode(text, **kwargs)
 
-    def decode(self, token_ids: Union[int, list[int]], **kwargs):
+    def decode(self, token_ids: int | list[int], **kwargs):
         """Spoofs the pretrained tokenizer's decoding by converting integers to characters"""
 
         return SpoofTokenizer.char_decode(token_ids, **kwargs)

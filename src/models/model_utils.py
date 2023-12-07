@@ -1,5 +1,4 @@
 from enum import Enum
-from typing import Union
 
 from transformers import PreTrainedModel, AutoModelForCausalLM, PreTrainedTokenizer, AutoTokenizer
 from transformers.tokenization_utils_base import TextInput, PreTokenizedInput, EncodedInput
@@ -7,7 +6,7 @@ from transformers.tokenization_utils_base import TextInput, PreTokenizedInput, E
 
 class ModelSrc(Enum):
 
-    LOCAL = "local"
+    HF_LOCAL = "huggingface_local"
     OPENAI_API = "openai"
     HF_API = "huggingface_hub"
     DEV = "dev"
@@ -31,7 +30,7 @@ class ModelInfo:
 
 class SpoofTokenizer:
     @staticmethod
-    def char_encode(text: Union[TextInput, PreTokenizedInput, EncodedInput], **kwargs):
+    def char_encode(text: TextInput | PreTokenizedInput | EncodedInput, **kwargs):
         """Spoofs the pretrained tokenizer's encoding by converting characters to integers"""
 
         if type(text) is str:
@@ -45,7 +44,7 @@ class SpoofTokenizer:
         return encoded
 
     @staticmethod
-    def char_decode(token_ids: Union[int, list[int]], **kwargs):
+    def char_decode(token_ids: int | list[int], **kwargs):
         """Spoofs the pretrained tokenizer's decoding by converting integers to characters"""
 
         if type(token_ids) is int:
