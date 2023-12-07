@@ -13,18 +13,32 @@ from src.models.model_utils import ModelSrc
 from src.models.openai_model import OpenAIModel
 
 
+_fastchat_workers = []
+
+
 def use_fastchat_model(model_path: str):
-    root_logger.info("Initializing fastchat controller...")
-    Popen(['python3', '-m', 'fastchat.serve.controller'], stdout=subprocess.DEVNULL, stderr=subprocess.STDOUT)
-    time.sleep(3)
+    if model_path in _fastchat_workers:
+        return
+
+    if len(_fastchat_workers) == 0:
+        root_logger.info("Initializing fastchat controller...")
+        Popen(['python3', '-m', 'fastchat.serve.controller'], stdout=subprocess.DEVNULL, stderr=subprocess.STDOUT)
+        time.sleep(3)
+
     root_logger.info(f"Initializing {model_path} worker...")
     Popen(['python3', '-m', 'fastchat.serve.model_worker', '--model-path', model_path], stdout=subprocess.DEVNULL, stderr=subprocess.STDOUT)
     time.sleep(10)
-    root_logger.info("Starting fastchat openai server...")
-    Popen(['python3', '-m', 'fastchat.serve.openai_api_server', '--host', 'localhost', '--port', '8000'], stdout=subprocess.DEVNULL, stderr=subprocess.STDOUT)
-    time.sleep(15)
+
+    if len(_fastchat_workers) == 0:
+        root_logger.info("Starting fastchat openai server...")
+        Popen(['python3', '-m', 'fastchat.serve.openai_api_server', '--host', 'localhost', '--port', '8000'], stdout=subprocess.DEVNULL, stderr=subprocess.STDOUT)
+        time.sleep(15)
+
     root_logger.info("Started!")
     openai.api_base = "http://localhost:8000/v1"
+
+    _fastchat_workers.append(model_path)
+
 
 def set_seed(seed: int):
     print(f"Setting random seed to {seed}")

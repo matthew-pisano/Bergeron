@@ -1,26 +1,30 @@
 import random
 import string
-from typing import Union
+from typing import Union, Type
 
-from datasets import load_dataset
+from datasets import load_dataset, get_dataset_config_names
 
 
 class Benchmark:
 
     repo = ""
     test_split = ""
-    dev_split = ""
+    held_out_split = ""
 
-    def __init__(self, config_name="all", split: list[str] | None = None):
+    def __init__(self, config_name: str, split: list[str] | None = None):
 
         if split is None:
             split = [self.test_split]
-        if self.dev_split not in split:
-            split.append(self.dev_split)
+        if self.held_out_split not in split:
+            split.append(self.held_out_split)
 
         split_dataset = load_dataset(self.repo, config_name, split=split)
         self.dataset = {split_name: split_dataset[split_idx] for split_idx, split_name in enumerate(split)}
         self.split = split
+
+    @classmethod
+    def configs(cls):
+        return get_dataset_config_names(cls.repo)
 
     def split_prompts(self, split_name: str = ""):
 
@@ -48,14 +52,18 @@ class MMLU(Benchmark):
 
     repo = "cais/mmlu"
     test_split = "test"
-    dev_split = "dev"
+    held_out_split = "validation"
+
+    @classmethod
+    def configs(cls):
+        return [config for config in super().configs() if config != "all"]
 
     def format_question(self, question_id: int, split_name: str = "", n_shot=0, as_example=False) -> str:
 
         examples = []
-        num_dev = len(self.dataset["dev"])
+        num_dev = len(self.dataset[self.held_out_split])
         while len(examples) < n_shot:
-            examples.append(self.format_question(random.randint(0, num_dev-1), split_name="dev", n_shot=0, as_example=True))
+            examples.append(self.format_question(random.randint(0, num_dev-1), split_name=self.held_out_split, n_shot=0, as_example=True))
 
         sample = self.split_prompts(split_name=split_name)[question_id]
         choices = "\n".join([f"{string.ascii_lowercase[i]}) {choice}" for i, choice in enumerate(sample["choices"])])
@@ -84,15 +92,15 @@ Answer: """
 def benchmark_from_name(benchmark_name: str, config_name: str = None, split: list[str] | None = None) -> Benchmark:
 
     if "mmlu" in benchmark_name.lower():
-        return MMLU(config_name=config_name, split=split)
+        return benchmark_class_from_name(benchmark_name)(config_name=config_name, split=split)
 
     raise ValueError("Could not find benchmark "+benchmark_name)
 
 
-if __name__ == "__main__":
-    mmlu = MMLU()
-    for i in range(10):
-        print("\n<<--<question>-->>\n")
-        question = mmlu.format_question(i, n_shot=3)
-        print(question)
+def benchmark_class_from_name(benchmark_name: str) -> Type[Benchmark]:
+
+    if "mmlu" in benchmark_name.lower():
+        return MMLU
+
+    raise ValueError("Could not find benchmark "+benchmark_name)
 

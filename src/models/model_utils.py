@@ -1,6 +1,8 @@
 from enum import Enum
 
-from transformers import PreTrainedModel, AutoModelForCausalLM, PreTrainedTokenizer, AutoTokenizer
+from transformers import AutoModelForCausalLM, AutoTokenizer
+from transformers.modeling_utils import PreTrainedModel
+from transformers.tokenization_utils import PreTrainedTokenizer
 from transformers.tokenization_utils_base import TextInput, PreTokenizedInput, EncodedInput
 
 
