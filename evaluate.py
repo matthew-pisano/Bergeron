@@ -208,18 +208,18 @@ def eval_reports(responses: dict):
     for prompt_type, prompt_stats in responses.items():
         stats[prompt_type] = {"total": 0, "detections": 0}
         for prompt_stat in prompt_stats:
-            is_false_detection = False
+            dangerous_detection = False
 
             for report in prompt_stat["detection_reports"]:
-                is_false_detection = report["dangerous_prompt"]
+                dangerous_detection = report["dangerous_prompt"] or report["dangerous_response"]
 
-                if is_false_detection:
+                if dangerous_detection:
                     break
 
             stats[prompt_type]["total"] += 1
             stats["combined"]["total"] += 1
 
-            if is_false_detection:
+            if dangerous_detection:
                 stats[prompt_type]["detections"] += 1
                 stats["combined"]["detections"] += 1
 
@@ -256,7 +256,7 @@ def eval_responses_and_save(target_model_repr: str, benchmark_name: str, eval_ac
         if stat["total"] > 0:
             root_logger.unchecked(model_name, stat_type, "total:", stat["total"], f", {eval_key}:", stat[eval_key], f", {eval_key} rate: ", round(stat[eval_key]/stat["total"]*100, 2))
 
-    out_file = resp_file.replace("responses", "evaluations").replace(".json", "")+"-eval.json"
+    out_file = resp_file.replace("responses", "evaluations").replace(".json", "")+f"-{eval_action.value}.json"
 
     full_stats = stats
 
@@ -294,42 +294,43 @@ def main():
     root_logger.set_level(root_logger.DEBUG)
 
     # Action
-    # action = EvalAction.RESPOND
-    action = EvalAction.EVAL_REPORTS
+    action = EvalAction.RESPOND
+    # action = EvalAction.EVAL_REPORTS
     # action = EvalAction.EVAL_RESPONSES
 
     # primary_model_name = "dev/human"
-    # primary_model_name = "gpt-3.5-turbo"
-    primary_model_name = "mistralai/Mistral-7B-Instruct-v0.1"
+    primary_model_name = "gpt-3.5-turbo"
+    # primary_model_name = "mistralai/Mistral-7B-Instruct-v0.1"
     # primary_model_name = "meta-llama/Llama-2-7b-chat-hf"
 
     # secondary_model_name = "dev/human"
-    # secondary_model_name = "gpt-3.5-turbo"
-    secondary_model_name = "mistralai/Mistral-7B-Instruct-v0.1"
+    secondary_model_name = "gpt-3.5-turbo"
+    # secondary_model_name = "mistralai/Mistral-7B-Instruct-v0.1"
     # secondary_model_name = "meta-llama/Llama-2-7b-chat-hf"
 
     use_bergeron = True
+    num_samples = None
 
     # Benchmark
-    # benchmark_name = "adversarial"
+    benchmark_name = "adversarial"
     # benchmark_name = "mundane"
-    benchmark_name = "cais/mmlu"
+    # benchmark_name = "cais/mmlu"
 
     # Prompt class
     prompt_classes = None
 
-    primary_model_info = ModelInfo(*model_info_from_name(primary_model_name), model_task="conversational")
+    primary_model_info = ModelInfo(*model_info_from_name(primary_model_name, fastchat_enabled=action == EvalAction.RESPOND), model_task="conversational")
     main_model = Primary(primary_model_info)
 
     if use_bergeron:
         rephrase_model_info = ModelInfo("dev/echo", ModelSrc.DEV, None, None)
         # rephrase_model_info = ModelInfo("eugenesiow/bart-paraphrase", ModelSrc.HF_LOCAL, BartForConditionalGeneration, BartTokenizer, model_task="summarization")
-        secondary_model_info = ModelInfo(*model_info_from_name(secondary_model_name), model_task="conversational")
+        secondary_model_info = ModelInfo(*model_info_from_name(secondary_model_name, fastchat_enabled=action == EvalAction.RESPOND), model_task="conversational")
         secondary = Secondary(secondary_model_info, rephrase_model_info)
         main_model = Combined(main_model, secondary)
 
     if action == EvalAction.RESPOND:
-        test_generate_responses(main_model, benchmark_name, prompt_classes, num_samples=5)
+        test_generate_responses(main_model, benchmark_name, prompt_classes, num_samples=num_samples)
     else:
         test_evaluate_responses(main_model.name, benchmark_name, action, prompt_classes)
 

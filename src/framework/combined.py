@@ -52,7 +52,7 @@ class Combined(BaseModel):
                 detection_report.dangerous_prompt = True
 
             root_logger.debug("Generating conscience...")
-            sanitized = self.secondary.conscience_suggestion(prompt, input_critique)
+            sanitized = self.secondary.make_conscience_prompt(prompt, input_critique)
 
             root_logger.debug("Generating response with conscience...")
             primary_response = self.primary.generate(sanitized, **kwargs)
@@ -68,7 +68,8 @@ class Combined(BaseModel):
                 detection_report.dangerous_response = True
 
             root_logger.debug("Generating final correction...")
-            primary_response = self.secondary.correct_response(primary_response, resp_critique, **kwargs)
+            correction_prompt = self.secondary.make_correction_prompt(primary_response, resp_critique)
+            primary_response = self.primary.generate(correction_prompt, **kwargs)
 
         detection_report.seal()
 

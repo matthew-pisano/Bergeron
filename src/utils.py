@@ -80,12 +80,13 @@ def converse(model: BaseModel, do_sample=True, temperature=0.7, max_new_tokens=N
         context = ""
 
 
-def model_info_from_name(target_model_name: str) -> tuple[str, ModelSrc, PreTrainedModel | None, PreTrainedTokenizer | None]:
+def model_info_from_name(target_model_name: str, fastchat_enabled=True) -> tuple[str, ModelSrc, PreTrainedModel | None, PreTrainedTokenizer | None]:
     if target_model_name.startswith("dev/"):
         model_name, model_src, model_class, tokenizer_class = target_model_name, ModelSrc.DEV, None, None
     elif target_model_name.startswith("meta-llama/") or target_model_name.startswith("mistralai/"):
         model_name, model_src, model_class, tokenizer_class = target_model_name, ModelSrc.OPENAI_API, None, None
-        use_fastchat_model(model_name)
+        if fastchat_enabled:
+            use_fastchat_model(model_name)
     elif "gpt-" in target_model_name:
         model_name, model_src, model_class, tokenizer_class = target_model_name, ModelSrc.OPENAI_API, None, None
     else:
