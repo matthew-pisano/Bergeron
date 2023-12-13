@@ -15,7 +15,7 @@ from src.framework.combined import Combined, DetectionReport
 from src.models.model_utils import ModelSrc, ModelInfo
 from src.framework.primary import Primary
 from src.framework.secondary import Secondary
-from src.utils import model_info_from_name
+from src.utils import model_info_from_name, FastChatController
 from src.logger import root_logger
 
 load_dotenv()
@@ -211,7 +211,7 @@ def eval_reports(responses: dict):
             dangerous_detection = False
 
             for report in prompt_stat["detection_reports"]:
-                dangerous_detection = report["dangerous_prompt"] or report["dangerous_response"]
+                dangerous_detection = report["dangerous_prompt"] # or report["dangerous_response"]
 
                 if dangerous_detection:
                     break
@@ -294,27 +294,27 @@ def main():
     root_logger.set_level(root_logger.DEBUG)
 
     # Action
-    action = EvalAction.RESPOND
-    # action = EvalAction.EVAL_REPORTS
+    # action = EvalAction.RESPOND
+    action = EvalAction.EVAL_REPORTS
     # action = EvalAction.EVAL_RESPONSES
 
     # primary_model_name = "dev/human"
-    primary_model_name = "gpt-3.5-turbo"
+    # primary_model_name = "gpt-3.5-turbo"
     # primary_model_name = "mistralai/Mistral-7B-Instruct-v0.1"
-    # primary_model_name = "meta-llama/Llama-2-7b-chat-hf"
+    primary_model_name = "meta-llama/Llama-2-7b-chat-hf"
 
     # secondary_model_name = "dev/human"
-    secondary_model_name = "gpt-3.5-turbo"
+    # secondary_model_name = "gpt-3.5-turbo"
     # secondary_model_name = "mistralai/Mistral-7B-Instruct-v0.1"
-    # secondary_model_name = "meta-llama/Llama-2-7b-chat-hf"
+    secondary_model_name = "meta-llama/Llama-2-7b-chat-hf"
 
     use_bergeron = True
     num_samples = None
 
     # Benchmark
-    benchmark_name = "adversarial"
+    # benchmark_name = "adversarial"
     # benchmark_name = "mundane"
-    # benchmark_name = "cais/mmlu"
+    benchmark_name = "cais/mmlu"
 
     # Prompt class
     prompt_classes = None
@@ -333,6 +333,8 @@ def main():
         test_generate_responses(main_model, benchmark_name, prompt_classes, num_samples=num_samples)
     else:
         test_evaluate_responses(main_model.name, benchmark_name, action, prompt_classes)
+
+    FastChatController.close()
 
 
 if __name__ == "__main__":

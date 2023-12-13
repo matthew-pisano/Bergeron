@@ -36,7 +36,8 @@ class BaseModel:
         if no_echo and not model.name_or_path.startswith("dev") and prompt in response:
             response = response.replace(prompt, "")
 
-        root_logger.debug("[MODEL RESP]\n", response)
+        root_logger.debug(f"[MODEL ({model.name_or_path}) PROMPT]\n", prompt)
+        root_logger.debug(f"[MODEL ({model.name_or_path}) RESP]\n", response)
 
         return response.strip("\n")
 

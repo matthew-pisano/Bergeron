@@ -12,7 +12,8 @@ from src.framework.combined import Combined
 from src.models.model_utils import ModelSrc, ModelInfo
 from src.framework.primary import Primary
 from src.framework.secondary import Secondary
-from src.utils import set_seed, converse
+from src.utils import set_seed
+from src.converse import converse
 
 load_dotenv()
 openai.api_key = os.getenv("OPENAI_API_KEY")

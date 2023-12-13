@@ -9,12 +9,10 @@ from transformers.tokenization_utils_base import TextInput, EncodedInput, PreTok
 
 from src.logger import root_logger
 from src.models.model_utils import SpoofTokenizer
+from src.utils import GLOBAL_SEED, FastChatController
 
 
 class OpenAIModel(PreTrainedModel):
-
-    _seed: int = None
-    """The seed to use for API calls"""
 
     def __init__(self, model_name: str, **kwargs):
         self.name_or_path = model_name
@@ -40,9 +38,10 @@ class OpenAIModel(PreTrainedModel):
                 while retries > 0:
                     retries -= 1
                     try:
+                        openai.api_base = "https://api.openai.com/v1"
                         resp = openai.ChatCompletion.create(model=self.name_or_path.split("/")[-1], messages=[
                             {"role": "system", "content": "You are an AI expert in adversarial prompts."},
-                            {"role": "user", "content": prompt}], seed=self._seed, request_timeout=timeout, **kwargs)
+                            {"role": "user", "content": prompt}], seed=GLOBAL_SEED, request_timeout=timeout, **kwargs)
                         resp_encoding = self.tokenizer.encode(resp["choices"][0]["message"]["content"])
                         break
                     except Exception as e:
@@ -51,21 +50,13 @@ class OpenAIModel(PreTrainedModel):
                         root_logger.warning(f"Received error {e} from OpenAI API.  Retrying...")
                         time.sleep(5)
             else:
+                openai.api_base = f"http://localhost:{FastChatController.get_worker(self.name_or_path)['port']}/v1"
                 resp = openai.Completion.create(model=self.name_or_path.split("/")[-1], prompt=prompt, **kwargs)
                 resp_encoding = self.tokenizer.encode(resp["choices"][0]["text"])
 
             responses.append(resp_encoding)
 
         return torch.LongTensor(responses)
-
-    @classmethod
-    def set_seed(cls, seed: int):
-        """Sets the seed to be used for API calls
-
-        Args:
-            seed: The new seed to use"""
-
-        cls._seed = seed
 
 
 class OpenAITokenizer(PreTrainedTokenizer):
