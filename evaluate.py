@@ -1,21 +1,21 @@
 import dataclasses
+import datetime
 import json
 import os
+import random
+import time
 from enum import Enum
 
+import argparse
 import openai
 from tqdm import tqdm
-from datasets import get_dataset_config_names
 from dotenv import load_dotenv
-from transformers import BartForConditionalGeneration, BartTokenizer
 
 from src.benchmarks import benchmark_from_name, benchmark_class_from_name
 from src.framework.base_model import BaseModel
-from src.framework.combined import Combined, DetectionReport
-from src.models.model_utils import ModelSrc, ModelInfo
+from src.framework.bergeron import Bergeron, DetectionReport
 from src.framework.primary import Primary
-from src.framework.secondary import Secondary
-from src.utils import model_info_from_name, FastChatController
+from src.utils import FastChatController, set_seed
 from src.logger import root_logger
 
 load_dotenv()
@@ -28,6 +28,13 @@ class EvalAction(Enum):
     RESPOND = "respond"
     EVAL_REPORTS = "eval_reports"
     EVAL_RESPONSES = "eval_responses"
+
+    @classmethod
+    def from_str(cls, action_str: str):
+        for action in cls:
+            if action_str == action.value:
+                return action
+        raise ValueError(f"Unknown action {action_str}")
 
 
 eval_prompt = """You are an expert in detecting unsafe responses from AI models.
@@ -56,7 +63,7 @@ Evaluation:
 """
 
 
-def load_prompts(benchmark_name: str, prompt_classes: list[str], num_samples: int = None):
+def load_prompts(benchmark_name: str, prompt_classes: list[str] | None, num_samples: int = None):
     """Load prompt dataset from the given benchmark"""
 
     all_prompts = {}
@@ -97,7 +104,7 @@ def generate_responses(model: BaseModel, prompts: dict[str, list[str]], repetiti
             while i < repetitions:
 
                 report = DetectionReport()
-                if isinstance(model, Combined):
+                if isinstance(model, Bergeron):
                     kwargs["detection_report"] = report
 
                 resp = model.generate(prompt, do_sample=do_sample, temperature=temperature, max_new_tokens=max_new_tokens, **kwargs)
@@ -201,6 +208,7 @@ def eval_responses(eval_model: BaseModel, responses: dict, **kwargs):
 
 
 def eval_reports(responses: dict):
+
     stats = {"combined": {"total": 0, "detections": 0}}
 
     num_prompts = sum([len(chunk) for chunk in responses.values()])
@@ -229,7 +237,7 @@ def eval_reports(responses: dict):
     return stats
 
 
-def eval_responses_and_save(target_model_repr: str, benchmark_name: str, eval_action: EvalAction, prompt_classes: list[str], eval_model: BaseModel = None, **kwargs):
+def eval_responses_and_save(target_model_repr: str, benchmark_name: str, eval_action: EvalAction, prompt_classes: list[str] | None, eval_model: BaseModel = None, **kwargs):
     """Evaluates the responses contained within the given file to instances of alignment failure.  Results are saved to a seperate file"""
 
     resp_file = f"data/responses/{benchmark_name.replace('/', '_')}/{target_model_repr.replace('/', '')}.json"
@@ -277,64 +285,51 @@ def eval_responses_and_save(target_model_repr: str, benchmark_name: str, eval_ac
         file.write(json.dumps(full_stats))
 
 
-def test_generate_responses(target_model: BaseModel, benchmark_name: str, prompt_classes: list[str] | None, num_samples: int = None):
-
-    prompts = load_prompts(benchmark_name, prompt_classes, num_samples=num_samples)
-    generate_and_save_responses(target_model, prompts, f"data/responses/{benchmark_name.replace('/', '_')}", repetitions=1, max_new_tokens=200)
-
-
-def test_evaluate_responses(target_model_repr: str, benchmark_name: str, eval_action: EvalAction, prompt_classes: list[str]| None):
-
-    main_model = Primary(ModelInfo(*model_info_from_name("gpt-4")))
-    eval_responses_and_save(target_model_repr, benchmark_name, eval_action, prompt_classes, eval_model=main_model, max_new_tokens=50)
-
-
 def main():
 
+    parser = argparse.ArgumentParser()
+    parser.add_argument("action", choices=[action.value for action in EvalAction], help="The evaluation action to perform", required=True)
+    parser.add_argument("benchmark", choices=["adversarial", "mundane", "cais/mmlu"], help="The benchmark to perform evaluations on", required=True)
+    parser.add_argument("--primary", help="The name of the primary model in huggingface format like 'meta-llama/Llama-2-7b-chat-hf'", required=True)
+    parser.add_argument("--secondary", help="The name of the secondary model in huggingface format like 'meta-llama/Llama-2-7b-chat-hf'", default=None)
+    parser.add_argument('--prompt', help="The prompt to be given when querying a model", default=None)
+    parser.add_argument('--seed', help="The seed for model inference", default=random.randint(0, 100))
+    args = parser.parse_args()
+
+    main_start = time.time()
+    print(f"Begin main at {datetime.datetime.utcfromtimestamp(main_start)} UTC")
+
     root_logger.set_level(root_logger.DEBUG)
+    set_seed(args.seed)
 
-    # Action
-    # action = EvalAction.RESPOND
-    action = EvalAction.EVAL_REPORTS
-    # action = EvalAction.EVAL_RESPONSES
+    action = EvalAction.from_str(args.action)
 
-    # primary_model_name = "dev/human"
-    # primary_model_name = "gpt-3.5-turbo"
-    # primary_model_name = "mistralai/Mistral-7B-Instruct-v0.1"
-    primary_model_name = "meta-llama/Llama-2-7b-chat-hf"
-
-    # secondary_model_name = "dev/human"
-    # secondary_model_name = "gpt-3.5-turbo"
-    # secondary_model_name = "mistralai/Mistral-7B-Instruct-v0.1"
-    secondary_model_name = "meta-llama/Llama-2-7b-chat-hf"
-
-    use_bergeron = True
     num_samples = None
-
-    # Benchmark
-    # benchmark_name = "adversarial"
-    # benchmark_name = "mundane"
-    benchmark_name = "cais/mmlu"
 
     # Prompt class
     prompt_classes = None
 
-    primary_model_info = ModelInfo(*model_info_from_name(primary_model_name, fastchat_enabled=action == EvalAction.RESPOND), model_task="conversational")
-    main_model = Primary(primary_model_info)
+    # Disable fastchat if models will not be run
+    if action != EvalAction.RESPOND:
+        FastChatController.disable()
 
-    if use_bergeron:
-        rephrase_model_info = ModelInfo("dev/echo", ModelSrc.DEV, None, None)
-        # rephrase_model_info = ModelInfo("eugenesiow/bart-paraphrase", ModelSrc.HF_LOCAL, BartForConditionalGeneration, BartTokenizer, model_task="summarization")
-        secondary_model_info = ModelInfo(*model_info_from_name(secondary_model_name, fastchat_enabled=action == EvalAction.RESPOND), model_task="conversational")
-        secondary = Secondary(secondary_model_info, rephrase_model_info)
-        main_model = Combined(main_model, secondary)
+    # Construct model to evaluate
+    if args.secondary is not None:
+        main_model = Bergeron.from_model_names(args.primary, args.secondary)
+    else:
+        main_model = Primary.from_model_name(args.primary)
 
     if action == EvalAction.RESPOND:
-        test_generate_responses(main_model, benchmark_name, prompt_classes, num_samples=num_samples)
+        prompts = load_prompts(args.benchmark, prompt_classes, num_samples=num_samples)
+        generate_and_save_responses(main_model, prompts, f"data/responses/{args.benchmark.replace('/', '_')}", repetitions=1, max_new_tokens=200)
     else:
-        test_evaluate_responses(main_model.name, benchmark_name, action, prompt_classes)
+        main_model = Primary.from_model_name("gpt-4")
+        eval_responses_and_save(main_model.name, args.benchmark, action, prompt_classes, eval_model=main_model, max_new_tokens=50)
 
     FastChatController.close()
+    main_end = time.time()
+    print(f"End main at {datetime.datetime.utcfromtimestamp(main_end)} UTC")
+    print(f"Elapsed time of {round(main_end - main_start, 3)}s")
 
 
 if __name__ == "__main__":

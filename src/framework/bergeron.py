@@ -25,12 +25,29 @@ class DetectionReport:
         super().__setattr__(key, value)
 
 
-class Combined(BaseModel):
-    """The combined model architecture.  The primary model responds to user input as usual.  The secondary model vets both the input and the response"""
+class Bergeron(BaseModel):
+    """The combined bergeron model.  The primary model responds to user input as usual.  The secondary model vets both the input and the response"""
 
     def __init__(self, primary_model: Primary, secondary_model: Secondary):
         self.primary = primary_model
         self.secondary = secondary_model
+
+    @classmethod
+    def from_model_names(cls, primary_model_name: str, secondary_model_name: str, rephrase_model_name: str = "dev/echo"):
+        """Creates a bergeron model from the names of its primary and secondary models
+
+        Args:
+            primary_model_name: The name of the primary model
+            secondary_model_name: The name of the secondary model
+            rephrase_model_name: The name of the rephrasing model
+        Returns:
+            An instance of a bergeron model"""
+
+        primary = Primary.from_model_name(primary_model_name)
+        secondary = Secondary.from_model_names(secondary_model_name, rephrase_model_name)
+
+        return cls(primary, secondary)
+
 
     @property
     def name(self):

@@ -4,7 +4,7 @@ import time
 from subprocess import Popen
 
 import transformers
-from transformers import PreTrainedModel, PreTrainedTokenizer
+from transformers import PreTrainedModel, PreTrainedTokenizer, LlamaTokenizer, AutoTokenizer, AutoModelForCausalLM, LlamaForCausalLM
 
 from src.logger import root_logger
 from src.models.model_utils import ModelSrc
@@ -17,8 +17,27 @@ class FastChatController:
 
     _workers = {}
     controller_process = None
+    _enabled = True
 
     port_generator = (i for i in range(8000, 8005))
+
+    @classmethod
+    def is_available(cls):
+        p = Popen(['python3', '-c', 'import fastchat'], stdout=subprocess.PIPE, stderr=subprocess.PIPE)
+        p.communicate()
+        return p.returncode == 0
+
+    @classmethod
+    def is_enabled(cls):
+        return cls._enabled
+
+    @classmethod
+    def enable(cls):
+        cls._enabled = True
+
+    @classmethod
+    def disable(cls):
+        cls._enabled = False
 
     @classmethod
     def get_worker(cls, model_path: str):
@@ -26,6 +45,11 @@ class FastChatController:
 
     @classmethod
     def open(cls, model_path: str, port: int = None):
+
+        if not cls.is_available():
+            raise ValueError('fastChat not available, please install fastchat to use it')
+        if not cls.is_enabled():
+            raise ValueError('fastChat has been disabled, please enable it to use it')
 
         if model_path in cls._workers:
             return
@@ -76,13 +100,17 @@ def set_seed(seed: int):
     os.environ["PYTHONHASHSEED"] = str(GLOBAL_SEED)
 
 
-def model_info_from_name(target_model_name: str, fastchat_enabled=True) -> tuple[str, ModelSrc, PreTrainedModel | None, PreTrainedTokenizer | None]:
+def model_info_from_name(target_model_name: str) -> tuple[str, ModelSrc, PreTrainedModel | None, PreTrainedTokenizer | None]:
     if target_model_name.startswith("dev/"):
         model_name, model_src, model_class, tokenizer_class = target_model_name, ModelSrc.DEV, None, None
     elif target_model_name.startswith("meta-llama/") or target_model_name.startswith("mistralai/"):
-        model_name, model_src, model_class, tokenizer_class = target_model_name, ModelSrc.OPENAI_API, None, None
-        if fastchat_enabled:
+        if FastChatController.is_available() and FastChatController.is_enabled():
+            model_name, model_src, model_class, tokenizer_class = target_model_name, ModelSrc.OPENAI_API, None, None
             FastChatController.open(model_name)
+        else:
+            model_name, model_src = target_model_name, ModelSrc.HF_LOCAL
+            tokenizer_class = LlamaTokenizer if target_model_name.startswith("meta-llama/") else AutoTokenizer
+            model_class = LlamaForCausalLM if target_model_name.startswith("meta-llama/") else AutoModelForCausalLM
     elif "gpt-" in target_model_name:
         model_name, model_src, model_class, tokenizer_class = target_model_name, ModelSrc.OPENAI_API, None, None
     else:

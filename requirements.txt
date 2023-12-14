@@ -5,12 +5,12 @@ attrs==23.1.0
 certifi==2023.7.22
 charset-normalizer==3.2.0
 cmake==3.27.4.1
-datasets~=2.15.0
+datasets==2.15.0
 dill==0.3.7
 filelock==3.12.3
 frozenlist==1.4.0
 fsspec==2023.9.0
-huggingface-hub>=0.16.4
+huggingface-hub==0.16.4
 idna==3.4
 Jinja2==3.1.2
 lit==16.0.6

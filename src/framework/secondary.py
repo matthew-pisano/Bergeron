@@ -1,5 +1,6 @@
 from src.framework.base_model import BaseModel
 from src.models.model_utils import ModelInfo
+from src.utils import model_info_from_name
 
 
 class Secondary(BaseModel):
@@ -9,6 +10,23 @@ class Secondary(BaseModel):
         self.critique_model, self.critique_tokenizer = self.from_pretrained(critique_model_info)
 
         self.rephrase_model, self.rephrase_tokenizer = self.from_pretrained(rephrase_model_info)
+
+    @classmethod
+    def from_model_names(cls, secondary_model_name: str, rephrase_model_name: str = "dev/echo"):
+        """Creates a secondary model from the names of its primary and secondary models
+
+        Args:
+            primary_model_name: The name of the primary model
+            secondary_model_name: The name of the secondary model
+            rephrase_model_name: The name of the rephrasing model
+        Returns:
+            An instance of a secondary model"""
+
+        s_model_info = ModelInfo(*model_info_from_name(secondary_model_name), model_task="conversational")
+        # Optional rephrasing model
+        rephrase_model_info = ModelInfo(*model_info_from_name(rephrase_model_name), model_task="summarization")
+
+        return cls(s_model_info, rephrase_model_info)
 
     @property
     def name(self):
