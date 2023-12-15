@@ -1,13 +1,17 @@
-from src.framework.base_model import BaseModel
-from src.models.model_utils import ModelInfo
+from src.framework.framework_model import FrameworkModel
+from src.framework.framework_utils import ModelInfo, from_pretrained
 from src.utils import model_info_from_name
 
 
-class Primary(BaseModel):
+class Primary(FrameworkModel):
     """The primary model.  Takes user input and generates a response as normal"""
 
     def __init__(self, model_info: ModelInfo):
-        self.model, self.tokenizer = self.from_pretrained(model_info)
+        """
+        Args:
+            model_info: The model information for the primary model"""
+
+        self.model, self.tokenizer = from_pretrained(model_info)
 
     @classmethod
     def from_model_name(cls, primary_model_name: str):
@@ -26,6 +30,4 @@ class Primary(BaseModel):
         return f"P({self.model.name_or_path})"
 
     def generate(self, prompt: str, **kwargs):
-        """Generates a response to the given prompt using the primary model"""
-
         return self.generate_using(prompt, self.model, self.tokenizer, **kwargs)

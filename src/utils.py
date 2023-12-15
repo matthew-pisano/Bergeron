@@ -1,14 +1,13 @@
 import os
 import subprocess
 import time
+from enum import Enum
 from subprocess import Popen
 
 import transformers
 from transformers import PreTrainedModel, PreTrainedTokenizer, LlamaTokenizer, AutoTokenizer, AutoModelForCausalLM, LlamaForCausalLM
 
 from src.logger import root_logger
-from src.models.model_utils import ModelSrc
-
 
 GLOBAL_SEED = None
 
@@ -98,6 +97,14 @@ def set_seed(seed: int):
     transformers.set_seed(GLOBAL_SEED)
     # Set a fixed value for the hash seed
     os.environ["PYTHONHASHSEED"] = str(GLOBAL_SEED)
+
+
+class ModelSrc(Enum):
+
+    HF_LOCAL = "huggingface_local"
+    OPENAI_API = "openai"
+    HF_API = "huggingface_hub"
+    DEV = "dev"
 
 
 def model_info_from_name(target_model_name: str) -> tuple[str, ModelSrc, PreTrainedModel | None, PreTrainedTokenizer | None]:

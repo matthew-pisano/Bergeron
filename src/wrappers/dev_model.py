@@ -1,47 +1,61 @@
-import os
-from typing import Optional, Union
+from typing import Optional
 
 import torch
-from transformers import PreTrainedModel, PreTrainedTokenizer
+from transformers import PreTrainedModel
 from transformers.generation.utils import GenerateOutput
-from transformers.tokenization_utils_base import TextInput, EncodedInput, PreTokenizedInput
 
-from src.models.model_utils import SpoofTokenizer
+from src.wrappers.wrapper_utils import SpoofTokenizer
 from src.logger import root_logger
 
 
 class DevModel(PreTrainedModel):
+    """Developer Model wrapper.  Spoofs pretrained model generation while really generating text through manual input or predetermined methods"""
 
     def __init__(self, model_name: str, **kwargs):
+        """
+        Args:
+            model_name: The name of the developer model to use"""
 
         if not model_name.startswith("dev"):
             raise ValueError("Dev models must have names in the form of 'dev/*'")
 
         self.name_or_path = model_name
-        self.tokenizer = DevTokenizer(model_name)
 
     @torch.no_grad()
     def generate(self, inputs: Optional[torch.Tensor] = None, **kwargs) -> GenerateOutput | torch.LongTensor:
-        """Spoofs the pretrained model generation to make it fit for API generation"""
+        """Spoofs the pretrained model generation to make it fit for custom development generation
 
+        Args:
+            inputs: The input tokens to use for generation
+        Returns:
+            The generated response tokens"""
+
+        tokenizer = SpoofTokenizer(self.name_or_path)
         responses = []
 
         for encoded_prompt in inputs:
-            prompt = self.tokenizer.decode(encoded_prompt.tolist())
+            prompt = tokenizer.decode(encoded_prompt.tolist())
 
             if self.name_or_path.endswith("human"):
-                resp = self.manual_input(prompt)
+                resp = self.generate_manual(prompt)
             elif self.name_or_path.endswith("echo"):
                 resp = self.generate_echo(prompt)
             else:
                 raise ValueError(f"Could not find dev model with name '{self.name_or_path}'")
 
-            responses.append(self.tokenizer.encode(resp))
+            responses.append(tokenizer.encode(resp))
 
         return torch.LongTensor(responses)
 
     @staticmethod
-    def manual_input(prompt: str):
+    def generate_manual(prompt: str):
+        """Allows for users to generate responses to the prompt themselves through standard input for debugging purposes
+
+        Args:
+            prompt: The prompt to show to standard output
+        Returns:
+            The manually generated response"""
+
         root_logger.unchecked("[MANUAL PROMPT]\n", prompt)
         root_logger.info("[MANUAL INSTRUCTIONS] Enter ':s' to submit your response")
 
@@ -59,20 +73,12 @@ class DevModel(PreTrainedModel):
 
     @staticmethod
     def generate_echo(prompt: str):
+        """Simply echoes the prompt
+
+        Args:
+            prompt: The prompt to clone as the response
+
+        Returns:
+            The unchanged prompt itself as the response"""
+
         return prompt
-
-
-class DevTokenizer(PreTrainedTokenizer):
-
-    def __init__(self, tokenizer_name: str, **kwargs):
-        self.tokenizer_name = tokenizer_name
-
-    def encode(self, text: TextInput | PreTokenizedInput | EncodedInput, **kwargs):
-        """Spoofs the pretrained tokenizer's encoding by converting characters to integers"""
-
-        return SpoofTokenizer.char_encode(text, **kwargs)
-
-    def decode(self, token_ids: int | list[int], **kwargs):
-        """Spoofs the pretrained tokenizer's decoding by converting integers to characters"""
-
-        return SpoofTokenizer.char_decode(token_ids, **kwargs)

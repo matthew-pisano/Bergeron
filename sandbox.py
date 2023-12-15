@@ -7,7 +7,7 @@ import openai
 from dotenv import load_dotenv
 import argparse
 
-from src.framework.base_model import BaseModel
+from src.framework.framework_model import FrameworkModel
 from src.logger import root_logger
 from src.framework.bergeron import Bergeron
 from src.framework.primary import Primary
@@ -19,7 +19,7 @@ openai.api_key = os.getenv("OPENAI_API_KEY")
 openai.organization = os.getenv("OPENAI_ORGANIZATION")
 
 
-def converse(model: BaseModel, do_sample=True, temperature=0.7, max_new_tokens=None, **kwargs):
+def converse(model: FrameworkModel, do_sample=True, temperature=0.7, max_new_tokens=None, **kwargs):
     """Allows the user to converse with a given model over multiple prompts.  NOTE: Context is NOT accumulated over time.
 
     Args:

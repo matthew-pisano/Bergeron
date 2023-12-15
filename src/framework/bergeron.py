@@ -1,6 +1,6 @@
 import dataclasses
 
-from src.framework.base_model import BaseModel
+from src.framework.framework_model import FrameworkModel
 from src.framework.primary import Primary
 from src.framework.secondary import Secondary
 from src.logger import root_logger
@@ -8,13 +8,15 @@ from src.logger import root_logger
 
 @dataclasses.dataclass
 class DetectionReport:
-    """Class mutated based on detections of any dangerous text during a combined model's generation"""
+    """Record of which components are activated during a bergeron model's generation"""
 
     dangerous_prompt: bool = False
     dangerous_response: bool = False
     sealed: bool = False
 
     def seal(self):
+        """Marks a record as sealed to differentiate between bergeron models that seal it and primary models that ignore it"""
+
         self.sealed = True
 
     def __setattr__(self, key, value):
@@ -25,10 +27,15 @@ class DetectionReport:
         super().__setattr__(key, value)
 
 
-class Bergeron(BaseModel):
+class Bergeron(FrameworkModel):
     """The combined bergeron model.  The primary model responds to user input as usual.  The secondary model vets both the input and the response"""
 
     def __init__(self, primary_model: Primary, secondary_model: Secondary):
+        """
+        Args:
+            primary_model: The primary framework model to use
+            secondary_model: The secondary framework model to use"""
+
         self.primary = primary_model
         self.secondary = secondary_model
 
@@ -48,13 +55,18 @@ class Bergeron(BaseModel):
 
         return cls(primary, secondary)
 
-
     @property
     def name(self):
         return f"C({self.primary.model.name_or_path}, {self.secondary.critique_model.name_or_path})"
 
     def generate(self, prompt: str, detection_report: DetectionReport = None, **kwargs):
-        """Performs sanitizes the user input and evaluation of model output before returning the final response"""
+        """Generates a response to the prompt from the primary model while sing the secondary to monitor for unsafe text
+
+        Args:
+            prompt: The prompt to generate a response for
+            detection_report: A detection report to use for recording which components have activated. Sealed after usage
+        Returns:
+            The generated safe response string"""
 
         prompt = prompt.strip("\n").strip(" ")
 
@@ -64,6 +76,7 @@ class Bergeron(BaseModel):
         root_logger.debug("Critiquing prompt...")
         input_critique = self.secondary.critique_prompt(rephrased_prompt, **kwargs)
 
+        # Checking the response for unsafe content and correcting
         if len(input_critique) > 0:
             if detection_report is not None:
                 detection_report.dangerous_prompt = True
@@ -80,6 +93,7 @@ class Bergeron(BaseModel):
         root_logger.debug("Generating final response critique...")
         resp_critique = self.secondary.critique_response(primary_response, **kwargs)
 
+        # Checking the response for unsafe content and correcting
         if len(resp_critique) > 0:
             if detection_report is not None:
                 detection_report.dangerous_response = True
@@ -88,6 +102,8 @@ class Bergeron(BaseModel):
             correction_prompt = self.secondary.make_correction_prompt(primary_response, resp_critique)
             primary_response = self.primary.generate(correction_prompt, **kwargs)
 
-        detection_report.seal()
+        # Seal the detection report so that it is clear that it was used
+        if detection_report is not None:
+            detection_report.seal()
 
         return primary_response
