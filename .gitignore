@@ -2,4 +2,7 @@
 venv
 .env
 docs/alignmentFailures
-data
+data/*.py
+data/evaluations
+data/prompts
+data/responses
