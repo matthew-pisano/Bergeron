@@ -2,7 +2,8 @@ from transformers import PreTrainedTokenizer
 from transformers.tokenization_utils_base import TextInput, PreTokenizedInput, EncodedInput
 
 
-class SpoofTokenizer(PreTrainedTokenizer):
+class MockTokenizer(PreTrainedTokenizer):
+    """A mock tokenizer to translate strings to character integer ids in a lossless fashion"""
 
     def __init__(self, tokenizer_name: str, **kwargs):
         self.tokenizer_name = tokenizer_name

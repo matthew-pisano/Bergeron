@@ -4,7 +4,7 @@ import torch
 from transformers import PreTrainedModel
 from transformers.generation.utils import GenerateOutput
 
-from src.wrappers.wrapper_utils import SpoofTokenizer
+from src.wrappers.mock_tokenizer import MockTokenizer
 from src.logger import root_logger
 
 
@@ -30,7 +30,7 @@ class DevModel(PreTrainedModel):
         Returns:
             The generated response tokens"""
 
-        tokenizer = SpoofTokenizer(self.name_or_path)
+        tokenizer = MockTokenizer(self.name_or_path)
         responses = []
 
         for encoded_prompt in inputs:

@@ -7,8 +7,9 @@ from transformers import PreTrainedModel
 from transformers.generation.utils import GenerateOutput
 
 from src.logger import root_logger
-from src.wrappers.wrapper_utils import SpoofTokenizer
-from src.utils import GLOBAL_SEED, FastChatController
+from src.wrappers.mock_tokenizer import MockTokenizer
+from src.utils import GLOBAL_SEED
+from src.fastchat import FastChatController
 
 
 class OpenAIAPIModel(PreTrainedModel):
@@ -39,7 +40,7 @@ class OpenAIAPIModel(PreTrainedModel):
         if "do_sample" in kwargs:
             kwargs.pop("do_sample")
 
-        tokenizer = SpoofTokenizer(self.name_or_path)
+        tokenizer = MockTokenizer(self.name_or_path)
         responses = []
 
         for encoded_prompt in inputs:

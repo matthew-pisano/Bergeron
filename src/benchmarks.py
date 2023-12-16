@@ -113,20 +113,24 @@ class MMLU(Benchmark):
 
     def format_question(self, question_id: int, split_name: str = "", n_shot=0, as_example=False) -> str:
 
+        # Collect few-shot examples
         examples = []
         num_dev = len(self.dataset[self.held_out_split])
         while len(examples) < n_shot:
             examples.append(self.format_question(random.randint(0, num_dev-1), split_name=self.held_out_split, n_shot=0, as_example=True))
 
+        # Format question as the question itself, newline-seperated choices, and a prompt for an answer
         sample = self.split_prompts(split_name=split_name)[question_id]
         choices = "\n".join([f"{string.ascii_lowercase[i]}) {choice}" for i, choice in enumerate(sample["choices"])])
         question = f"""{sample["question"]}
 {choices}
 Answer: """
 
+        # Include the answer to the prompt only if it is an example
         if as_example:
             question += string.ascii_lowercase[sample["answer"]]
 
+        # Create question-answering prompt
         prompt = "" if as_example else "Please answer the following question to the best of your ability. In your output give the answer ONLY. Do not give any explanation or other text. Just the letter choice if your answer."
         if len(examples) > 0:
             prompt += "\nFor example:\n"+"\n\n".join(examples)
@@ -143,6 +147,14 @@ Answer: """
 
 
 def benchmark_from_name(benchmark_name: str, config_name: str = None, split: list[str] | None = None) -> Benchmark:
+    """Gets an instance of a benchmark from its name
+
+    Args:
+        benchmark_name: The name of the benchmark
+        config_name: The configuration for that benchmark
+        split: The split, if any, to get
+    Returns:
+        An instance of the requested benchmark"""
 
     if "mmlu" in benchmark_name.lower():
         return benchmark_class_from_name(benchmark_name)(config_name=config_name, split=split)
@@ -151,6 +163,12 @@ def benchmark_from_name(benchmark_name: str, config_name: str = None, split: lis
 
 
 def benchmark_class_from_name(benchmark_name: str) -> Type[Benchmark]:
+    """Gets the class of a benchmark from its name
+
+    Args:
+        benchmark_name: The name of the benchmark
+    Returns:
+        The class of the requested benchmark"""
 
     if "mmlu" in benchmark_name.lower():
         return MMLU

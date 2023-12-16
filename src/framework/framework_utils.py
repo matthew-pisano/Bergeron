@@ -2,9 +2,10 @@ import torch
 from transformers import PreTrainedModel, AutoModelForCausalLM, PreTrainedTokenizer, AutoTokenizer, AutoModel
 
 from src.logger import root_logger
-from src.wrappers.hf_api_model import HFAPIModel, HFTokenizer
-from src.wrappers.dev_model import DevModel, DevTokenizer
-from src.wrappers.openai_api_model import OpenAIAPIModel, OpenAITokenizer
+from src.wrappers.hf_api_model import HFAPIModel
+from src.wrappers.dev_model import DevModel
+from src.wrappers.mock_tokenizer import MockTokenizer
+from src.wrappers.openai_api_model import OpenAIAPIModel
 from src.utils import ModelSrc
 
 
@@ -34,11 +35,11 @@ def from_pretrained(model_info: ModelInfo) -> tuple[PreTrainedModel, PreTrainedT
 
     root_logger.debug(f"Loading a pretrained model {model_info.pretrained_model_name_or_path} from {model_info.model_src}")
     if model_info.model_src == ModelSrc.OPENAI_API:
-        return OpenAIAPIModel(model_info.pretrained_model_name_or_path), OpenAITokenizer(model_info.pretrained_model_name_or_path)
+        return OpenAIAPIModel(model_info.pretrained_model_name_or_path), MockTokenizer(model_info.pretrained_model_name_or_path)
     elif model_info.model_src == ModelSrc.HF_API:
-        return HFAPIModel(model_info.pretrained_model_name_or_path, model_info.model_task), HFTokenizer(model_info.pretrained_model_name_or_path)
+        return HFAPIModel(model_info.pretrained_model_name_or_path, model_info.model_task), MockTokenizer(model_info.pretrained_model_name_or_path)
     elif model_info.model_src == ModelSrc.DEV:
-        return DevModel(model_info.pretrained_model_name_or_path), DevTokenizer(model_info.pretrained_model_name_or_path)
+        return DevModel(model_info.pretrained_model_name_or_path), MockTokenizer(model_info.pretrained_model_name_or_path)
     else:
         try:
             model = model_info.model_class.from_pretrained(model_info.pretrained_model_name_or_path, torch_dtype=torch.bfloat16)
