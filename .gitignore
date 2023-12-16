@@ -1,8 +1,10 @@
 .idea
 venv
 .env
-docs/alignmentFailures
 data/*.py
 data/evaluations
 data/prompts
 data/responses
+docs/pdf
+docs/researchNotes
+docs/alignmentFailures
