@@ -101,9 +101,9 @@ def test_converse(primary_model_name: str, secondary_model_name: str):
 def main():
 
     parser = argparse.ArgumentParser()
-    parser.add_argument("action", choices=["query", "converse"], help="The action to perform", required=True)
-    parser.add_argument("--primary", help="The name of the primary model in huggingface format like 'meta-llama/Llama-2-7b-chat-hf'", required=True)
-    parser.add_argument("--secondary", help="The name of the secondary model in huggingface format like 'meta-llama/Llama-2-7b-chat-hf'", default=None)
+    parser.add_argument("action", choices=["query", "converse"], help="The action to perform")
+    parser.add_argument("-p", "--primary", help="The name of the primary model in huggingface format like 'meta-llama/Llama-2-7b-chat-hf'", required=True)
+    parser.add_argument("-s", "--secondary", help="The name of the secondary model in huggingface format like 'meta-llama/Llama-2-7b-chat-hf'", default=None)
     parser.add_argument('--prompt', help="The prompt to be given when querying a model", default=None)
     parser.add_argument('--seed', help="The seed for model inference", default=random.randint(0, 100))
     args = parser.parse_args()
@@ -111,7 +111,7 @@ def main():
     main_start = time.time()
     print(f"Begin main at {datetime.datetime.utcfromtimestamp(main_start)} UTC")
 
-    root_logger.set_level(root_logger.DEBUG)
+    # root_logger.set_level(root_logger.DEBUG)
     set_seed(int(args.seed))
 
     if args.action == "query":

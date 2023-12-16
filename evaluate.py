@@ -234,7 +234,7 @@ def eval_responses_safety(eval_model: FrameworkModel, responses: dict, **kwargs)
     return stats
 
 
-def eval_secondary_judgments(responses: dict):
+def eval_secondary_detections(responses: dict):
     """Tally the number of times the secondary model detected that a prompt was unsafe as gotten from the detection reports
 
     Args:
@@ -252,7 +252,7 @@ def eval_secondary_judgments(responses: dict):
             dangerous_detection = False
 
             # If any report was unsafe out of all generated per prompt
-            for report in prompt_stat["detection_reports"]:
+            for report in prompt_stat.get("detection_reports", []):
                 dangerous_detection = report["dangerous_prompt"]
 
                 if dangerous_detection:
@@ -296,7 +296,7 @@ def eval_responses_and_save(target_model_repr: str, benchmark_name: str, eval_ac
         stats = eval_responses_safety(eval_model, responses, **kwargs)
         eval_key = "failures"
     elif eval_action == EvalAction.EVAL_REPORTS:
-        stats = eval_secondary_judgments(responses)
+        stats = eval_secondary_detections(responses)
         eval_key = "detections"
     else:
         raise ValueError(f"Unknown evaluation action '{eval_action}'")
@@ -330,10 +330,11 @@ def eval_responses_and_save(target_model_repr: str, benchmark_name: str, eval_ac
 def main():
 
     parser = argparse.ArgumentParser()
-    parser.add_argument("action", choices=[action.value for action in EvalAction], help="The evaluation action to perform", required=True)
-    parser.add_argument("benchmark", choices=["adversarial", "mundane", "cais/mmlu"], help="The benchmark to perform evaluations on", required=True)
-    parser.add_argument("--primary", help="The name of the primary model in huggingface format like 'meta-llama/Llama-2-7b-chat-hf'", required=True)
-    parser.add_argument("--secondary", help="The name of the secondary model in huggingface format like 'meta-llama/Llama-2-7b-chat-hf'", default=None)
+    parser.add_argument("action", choices=[action.value for action in EvalAction], help="The evaluation action to perform")
+    parser.add_argument("benchmark", choices=["adversarial", "mundane", "cais/mmlu"], help="The benchmark to perform evaluations on")
+    parser.add_argument("-p", "--primary", help="The name of the primary model in huggingface format like 'meta-llama/Llama-2-7b-chat-hf'", required=True)
+    parser.add_argument("-s", "--secondary", help="The name of the secondary model in huggingface format like 'meta-llama/Llama-2-7b-chat-hf'", default=None)
+    parser.add_argument("--evaluator", help="The name of the model to use for evaluating prompts in huggingface format like 'meta-llama/Llama-2-7b-chat-hf'", default="gpt-4")
     parser.add_argument('--prompt', help="The prompt to be given when querying a model", default=None)
     parser.add_argument('--seed', help="The seed for model inference", default=random.randint(0, 100))
     args = parser.parse_args()
@@ -341,7 +342,7 @@ def main():
     main_start = time.time()
     print(f"Begin main at {datetime.datetime.utcfromtimestamp(main_start)} UTC")
 
-    root_logger.set_level(root_logger.DEBUG)
+    # root_logger.set_level(root_logger.DEBUG)
     set_seed(args.seed)
 
     action = EvalAction[args.action.upper()]
@@ -365,8 +366,7 @@ def main():
         prompts = load_prompts(args.benchmark, prompt_classes, num_samples=num_samples)
         generate_and_save_responses(main_model, prompts, f"data/responses/{args.benchmark.replace('/', '_')}", repetitions=1, max_new_tokens=200)
     else:
-        main_model = Primary.from_model_name("gpt-4")
-        eval_responses_and_save(main_model.name, args.benchmark, action, prompt_classes, eval_model=main_model, max_new_tokens=50)
+        eval_responses_and_save(main_model.name, args.benchmark, action, prompt_classes, eval_model=args.evaluator, max_new_tokens=50)
 
     FastChatController.close()
     main_end = time.time()

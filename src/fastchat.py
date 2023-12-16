@@ -113,5 +113,6 @@ class FastChatController:
             for path in list(cls._workers.keys()):
                 cls.close(path)
 
-            cls.controller_process.terminate()
-            cls.controller_process = None
+            if cls.controller_process is not None:
+                cls.controller_process.terminate()
+                cls.controller_process = None
