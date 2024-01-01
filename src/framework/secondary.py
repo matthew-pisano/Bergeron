@@ -1,7 +1,7 @@
+from universalmodels import ModelInfo, pretrained_from_info, model_info_from_name, ModelSrc
+
 from src.framework.framework_model import FrameworkModel
-from src.framework.framework_utils import ModelInfo, from_pretrained
 from src.strings import PROMPT_CRITIQUE_PROMPT, RESPONSE_CRITIQUE_PROMPT, CONSCIENCE_DISCLAIMER_PROMPT, RESPONSE_CORRECTION_PROMPT
-from src.utils import model_info_from_name
 
 
 class Secondary(FrameworkModel):
@@ -13,22 +13,25 @@ class Secondary(FrameworkModel):
             critique_model_info: The information for the critique model
             rephrase_model_info: The information for the rephrasing model"""
 
-        self.critique_model, self.critique_tokenizer = from_pretrained(critique_model_info)
-        self.rephrase_model, self.rephrase_tokenizer = from_pretrained(rephrase_model_info)
+        self.critique_model, self.critique_tokenizer = pretrained_from_info(critique_model_info)
+        self.rephrase_model, self.rephrase_tokenizer = pretrained_from_info(rephrase_model_info)
 
     @classmethod
-    def from_model_names(cls, secondary_model_name: str, rephrase_model_name: str = "dev/echo"):
+    def from_model_names(cls, secondary_model_name: str, rephrase_model_name: str = "dev/echo",
+                         secondary_model_src: ModelSrc = ModelSrc.AUTO, rephrase_model_src: ModelSrc = ModelSrc.AUTO):
         """Creates a secondary model from the names of its primary and secondary models
 
         Args:
             secondary_model_name: The name of the secondary model
             rephrase_model_name: The name of the rephrasing model
+            secondary_model_src: The suggested source of the secondary model to load. Defaults to AUTO
+            rephrase_model_src: The suggested source of the rephrasing model to load. Defaults to AUTO
         Returns:
             An instance of a secondary model"""
 
-        s_model_info = ModelInfo(*model_info_from_name(secondary_model_name), model_task="conversational")
+        s_model_info = model_info_from_name(secondary_model_name, model_src=secondary_model_src, model_task="conversational")
         # Optional rephrasing model
-        rephrase_model_info = ModelInfo(*model_info_from_name(rephrase_model_name), model_task="summarization")
+        rephrase_model_info = model_info_from_name(rephrase_model_name, model_src=rephrase_model_src, model_task="summarization")
 
         return cls(s_model_info, rephrase_model_info)
 

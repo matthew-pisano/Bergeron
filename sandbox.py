@@ -6,13 +6,13 @@ import time
 import openai
 from dotenv import load_dotenv
 import argparse
+from universalmodels.constants import set_seed
+from universalmodels.fastchat import FastChatController
 
 from src.framework.framework_model import FrameworkModel
 from src.logger import root_logger
 from src.framework.bergeron import Bergeron
 from src.framework.primary import Primary
-from src.utils import set_seed
-from src.fastchat import FastChatController
 
 # Load OpenAI configuration
 load_dotenv()

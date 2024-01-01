@@ -10,14 +10,14 @@ import argparse
 import openai
 from tqdm import tqdm
 from dotenv import load_dotenv
+from universalmodels.constants import set_seed
+from universalmodels.fastchat import FastChatController
 
 from src.benchmarks import benchmark_from_name, benchmark_class_from_name
 from src.framework.framework_model import FrameworkModel
 from src.framework.bergeron import Bergeron, DetectionReport
 from src.framework.primary import Primary
 from src.strings import EVAL_PROMPT
-from src.utils import set_seed
-from src.fastchat import FastChatController
 from src.logger import root_logger
 
 # Load in credentials through environment variables
