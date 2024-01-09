@@ -10,6 +10,7 @@ import argparse
 import openai
 from tqdm import tqdm
 from dotenv import load_dotenv
+from universalmodels import ModelSrc
 from universalmodels.constants import set_seed
 from universalmodels.fastchat import FastChatController
 
@@ -336,6 +337,7 @@ def main():
     parser.add_argument("-s", "--secondary", help="The name of the secondary model in huggingface format like 'meta-llama/Llama-2-7b-chat-hf'", default=None)
     parser.add_argument("--evaluator", help="The name of the model to use for evaluating prompts in huggingface format like 'meta-llama/Llama-2-7b-chat-hf'", default="gpt-4")
     parser.add_argument('--prompt', help="The prompt to be given when querying a model", default=None)
+    parser.add_argument('--src', help=f"The source to load the models from", choices=[src.value for src in ModelSrc], default=ModelSrc.AUTO.value)
     parser.add_argument('--seed', help="The seed for model inference", default=random.randint(0, 100))
     args = parser.parse_args()
 
@@ -345,6 +347,7 @@ def main():
     # root_logger.set_level(root_logger.DEBUG)
     set_seed(args.seed)
 
+    model_src = [src for src in ModelSrc if src.value == args.src][0]
     action = EvalAction[args.action.upper()]
 
     num_samples = None
@@ -358,9 +361,9 @@ def main():
 
     # Construct model to evaluate
     if args.secondary is not None:
-        main_model = Bergeron.from_model_names(args.primary, args.secondary)
+        main_model = Bergeron.from_model_names(args.primary, args.secondary, primary_model_src=model_src, secondary_model_src=model_src)
     else:
-        main_model = Primary.from_model_name(args.primary)
+        main_model = Primary.from_model_name(args.primary, model_src=model_src)
 
     if action == EvalAction.RESPOND:
         prompts = load_prompts(args.benchmark, prompt_classes, num_samples=num_samples)
@@ -375,4 +378,8 @@ def main():
 
 
 if __name__ == "__main__":
-    main()
+    try:
+        main()
+    except Exception as e:
+        FastChatController.close()
+        raise e
