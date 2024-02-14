@@ -112,13 +112,17 @@ def main():
     parser.add_argument('--prompt', help="The prompt to be given when querying a model", default=None)
     parser.add_argument('--src', help=f"The source to load the models from", choices=[src.value for src in ModelSrc], default=ModelSrc.AUTO.value)
     parser.add_argument('--seed', help="The seed for model inference", default=random.randint(0, 100))
+    parser.add_argument('-v', help="The verbosity of the logging.", choices=["debug", "info", "warning", "error", "critical"], default="debug")
     args = parser.parse_args()
 
     main_start = time.time()
     logger.info(f"Begin main at {datetime.datetime.utcfromtimestamp(main_start)} UTC")
 
-    logger.setLevel(logging.DEBUG)
-    universal_logger.setLevel(logging.DEBUG)
+    if hasattr(logging, args.v.upper()):
+        logger.setLevel(getattr(logging, args.v.upper()))
+        universal_logger.setLevel(getattr(logging, args.v.upper()))
+    else:
+        raise ValueError(f"Unknown logging level '{args.v}'")
 
     set_seed(int(args.seed))
 
