@@ -1,7 +1,7 @@
 import torch
 from transformers import PreTrainedModel, PreTrainedTokenizer
 
-from src.logger import root_logger
+from src.constants import logger
 
 
 class FrameworkModel:
@@ -40,20 +40,20 @@ class FrameworkModel:
         if max_new_tokens is None:
             max_new_tokens = 128
 
-        # root_logger.debug("[MODEL PROMPT]\n", prompt)
+        # logger.debug("[MODEL PROMPT]\n%s", prompt)
 
         prompt_tokens = tokenizer.encode(prompt)
 
         generated = model.generate(torch.Tensor([prompt_tokens]).int(), do_sample=do_sample, temperature=temperature, max_new_tokens=max_new_tokens, **kwargs)[0]
         response = tokenizer.decode(generated, skip_special_tokens=True)
 
-        # root_logger.debug("[MODEL RESP]\n", response)
+        # logger.debug("[MODEL RESP]\n%s", response)
 
         if no_echo and not model.name_or_path.startswith("dev") and prompt in response:
             response = response.replace(prompt, "")
 
-        root_logger.debug(f"[MODEL ({model.name_or_path}) PROMPT]\n", prompt)
-        root_logger.debug(f"[MODEL ({model.name_or_path}) RESP]\n", response)
+        logger.debug(f"[MODEL ({model.name_or_path}) PROMPT]\n%s", prompt)
+        logger.debug(f"[MODEL ({model.name_or_path}) RESP]\n%s", response)
 
         return response.strip("\n")
 

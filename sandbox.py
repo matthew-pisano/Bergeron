@@ -1,26 +1,23 @@
 import datetime
-import os
+import logging
 import random
 import time
 
-import openai
-import universalmodels.logger
 from dotenv import load_dotenv
 import argparse
 
 from universalmodels import ModelSrc
 from universalmodels.constants import set_seed
 from universalmodels.fastchat import FastChatController
+from universalmodels.constants import logger as universal_logger
 
 from src.framework.framework_model import FrameworkModel
-from src.logger import root_logger
+from src.constants import logger
 from src.framework.bergeron import Bergeron
 from src.framework.primary import Primary
 
 # Load OpenAI configuration
 load_dotenv()
-openai.api_key = os.getenv("OPENAI_API_KEY")
-openai.organization = os.getenv("OPENAI_ORGANIZATION")
 
 
 def converse(model: FrameworkModel, do_sample=True, temperature=0.7, max_new_tokens=None, **kwargs):
@@ -54,10 +51,10 @@ def converse(model: FrameworkModel, do_sample=True, temperature=0.7, max_new_tok
         try:
             model_response = model.generate(context[:-1], do_sample=do_sample, temperature=temperature, max_new_tokens=max_new_tokens, **kwargs)
         except KeyboardInterrupt as e:
-            print("Keyboard interrupt: canceling generation")
+            logger.warning("Keyboard interrupt: canceling generation")
             continue
 
-        print(model_response)
+        logger.info(model_response)
         prev_context = context
         context = ""
 
@@ -86,7 +83,7 @@ def test_query(primary_model_name: str, secondary_model_name: str, prompt: str, 
 
     response = model.generate(prompt, do_sample=do_sample, temperature=temperature, max_new_tokens=max_new_tokens, **kwargs)
 
-    print("Model response:\n\n", response)
+    logger.info("Model response:\n\n", response)
 
 
 def test_converse(primary_model_name: str, secondary_model_name: str, model_src: ModelSrc = ModelSrc.AUTO):
@@ -118,10 +115,11 @@ def main():
     args = parser.parse_args()
 
     main_start = time.time()
-    print(f"Begin main at {datetime.datetime.utcfromtimestamp(main_start)} UTC")
+    logger.info(f"Begin main at {datetime.datetime.utcfromtimestamp(main_start)} UTC")
 
-    universalmodels.logger.root_logger.set_level(universalmodels.logger.root_logger.DEBUG)
-    # root_logger.set_level(root_logger.DEBUG)
+    logger.setLevel(logging.DEBUG)
+    universal_logger.setLevel(logging.DEBUG)
+
     set_seed(int(args.seed))
 
     model_src = [src for src in ModelSrc if src.value == args.src][0]
@@ -133,8 +131,8 @@ def main():
 
     FastChatController.close()
     main_end = time.time()
-    print(f"End main at {datetime.datetime.utcfromtimestamp(main_end)} UTC")
-    print(f"Elapsed time of {round(main_end-main_start, 3)}s")
+    logger.info(f"End main at {datetime.datetime.utcfromtimestamp(main_end)} UTC")
+    logger.info(f"Elapsed time of {round(main_end-main_start, 3)}s")
 
 
 if __name__ == "__main__":

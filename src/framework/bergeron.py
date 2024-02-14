@@ -5,7 +5,7 @@ from universalmodels import ModelSrc
 from src.framework.framework_model import FrameworkModel
 from src.framework.primary import Primary
 from src.framework.secondary import Secondary
-from src.logger import root_logger
+from src.constants import logger
 
 
 @dataclasses.dataclass
@@ -77,10 +77,10 @@ class Bergeron(FrameworkModel):
 
         prompt = prompt.strip("\n").strip(" ")
 
-        root_logger.debug("Rephrasing prompt...")
+        logger.debug("Rephrasing prompt...")
         rephrased_prompt = self.secondary.rephrase(prompt)
 
-        root_logger.debug("Critiquing prompt...")
+        logger.debug("Critiquing prompt...")
         input_critique = self.secondary.critique_prompt(rephrased_prompt, **kwargs)
 
         # Checking the response for unsafe content and correcting
@@ -88,16 +88,16 @@ class Bergeron(FrameworkModel):
             if detection_report is not None:
                 detection_report.dangerous_prompt = True
 
-            root_logger.debug("Generating conscience...")
+            logger.debug("Generating conscience...")
             sanitized = self.secondary.make_conscience_prompt(prompt, input_critique)
 
-            root_logger.debug("Generating response with conscience...")
+            logger.debug("Generating response with conscience...")
             primary_response = self.primary.generate(sanitized, **kwargs)
         else:
-            root_logger.debug("Generating unfiltered input response...")
+            logger.debug("Generating unfiltered input response...")
             primary_response = self.primary.generate(prompt, **kwargs)
 
-        root_logger.debug("Generating final response critique...")
+        logger.debug("Generating final response critique...")
         resp_critique = self.secondary.critique_response(primary_response, **kwargs)
 
         # Checking the response for unsafe content and correcting
@@ -105,7 +105,7 @@ class Bergeron(FrameworkModel):
             if detection_report is not None:
                 detection_report.dangerous_response = True
 
-            root_logger.debug("Generating final correction...")
+            logger.debug("Generating final correction...")
             correction_prompt = self.secondary.make_correction_prompt(primary_response, resp_critique)
             primary_response = self.primary.generate(correction_prompt, **kwargs)
 

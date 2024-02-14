@@ -1,30 +1,29 @@
 import dataclasses
 import datetime
 import json
+import logging
 import os
 import random
 import time
 from enum import Enum
 
 import argparse
-import openai
 from tqdm import tqdm
 from dotenv import load_dotenv
 from universalmodels import ModelSrc
 from universalmodels.constants import set_seed
 from universalmodels.fastchat import FastChatController
+from universalmodels.constants import logger as universal_logger
 
 from src.benchmarks import benchmark_from_name, benchmark_class_from_name
 from src.framework.framework_model import FrameworkModel
 from src.framework.bergeron import Bergeron, DetectionReport
 from src.framework.primary import Primary
 from src.strings import EVAL_PROMPT
-from src.logger import root_logger
+from src.constants import logger
 
 # Load in credentials through environment variables
 load_dotenv()
-openai.api_key = os.getenv("OPENAI_API_KEY")
-openai.organization = os.getenv("OPENAI_ORGANIZATION")
 
 
 class EvalAction(Enum):
@@ -43,7 +42,7 @@ def load_prompts(benchmark_name: str, prompt_classes: list[str] | None, num_samp
 
     Args:
         benchmark_name: The name of the prompt set to load
-        prompt_classes: The prompt classes (config names if using a HF benchmark) to load from the prompt set
+        prompt_classes: The prompt classes (config names if using an HF benchmark) to load from the prompt set
         num_samples: The number of samples to get per prompt class
     Returns:
         A dictionary of prompt classes and their associated prompts"""
@@ -63,13 +62,20 @@ def load_prompts(benchmark_name: str, prompt_classes: list[str] | None, num_samp
     # Load a local dataset of prompts from data folders
     prompt_files = os.listdir(f"data/prompts/{benchmark_name}")
 
+    remaining_classes = prompt_classes.copy() if prompt_classes is not None else None
+
     for file_name in tqdm(prompt_files, desc="Loading dataset"):
-        prompt_cls = file_name.split(".")[0]
+        prompt_cls = file_name.split("_")[0]
         if prompt_classes is None or prompt_cls in prompt_classes:
             with open(f"data/prompts/{benchmark_name}/{file_name}", "r") as file:
                 file_prompts = file.read().split("<prompt>")
                 samples = [prompt for prompt in file_prompts if len(prompt) > 3]
                 all_prompts[prompt_cls] = samples[:num_samples if num_samples is not None else len(samples)]
+            if remaining_classes is not None:
+                remaining_classes.remove(prompt_cls)
+
+    if remaining_classes is not None and len(remaining_classes) > 0:
+        logger.warning(f"Could not find prompt classes {remaining_classes} in the dataset")
 
     return all_prompts
 
@@ -111,7 +117,7 @@ def generate_responses(model: FrameworkModel, prompts: dict[str, list[str]], rep
                     prompt_stats["detection_reports"].append(dataclasses.asdict(report))
                     i += 1
                 else:
-                    root_logger.warning("Blank response to!", prompt)
+                    logger.warning("Blank response to: %s", prompt)
                     blank_resps += 1
                     if blank_resps > 3:
                         break
@@ -134,7 +140,7 @@ def generate_and_save_responses(target_model: FrameworkModel, prompts: dict[str,
         temperature: The temperature of the model
         max_new_tokens: The maximum number of new tokens to generate"""
 
-    root_logger.info(f"Generating responses from {target_model.name}")
+    logger.info(f"Generating responses from {target_model.name}")
     responses = generate_responses(target_model, prompts, repetitions=repetitions, do_sample=do_sample, temperature=temperature, max_new_tokens=max_new_tokens, **kwargs)
 
     out_file = out_dir.rstrip("/")+f"/{target_model.name.replace('/', '')}.json"
@@ -190,10 +196,10 @@ def is_alignment_failure(response: str, eval_model: FrameworkModel, do_sample=Tr
         if ("SUCCESS" in evaluation) ^ is_failure:
             return is_failure
         else:
-            root_logger.warning("Did not receive an evaluation, retrying...")
+            logger.warning("Did not receive an evaluation, retrying...")
             max_eval_retries -= 1
 
-    root_logger.warning("Could not gather an answer from the evaluation.  Returning default of SUCCESS.")
+    logger.warning("Could not gather an answer from the evaluation.  Returning default of SUCCESS.")
     return False
 
 
@@ -291,7 +297,7 @@ def eval_responses_and_save(target_model_repr: str, benchmark_name: str, eval_ac
         if prompt_classes is not None:
             responses = {k: v for k, v in responses.items() if k in prompt_classes}
 
-    root_logger.info(f"Evaluating responses from {model_name}")
+    logger.info(f"Evaluating responses from {model_name}")
 
     if eval_action == EvalAction.EVAL_RESPONSES:
         stats = eval_responses_safety(eval_model, responses, **kwargs)
@@ -304,7 +310,7 @@ def eval_responses_and_save(target_model_repr: str, benchmark_name: str, eval_ac
 
     for stat_type, stat in stats.items():
         if stat["total"] > 0:
-            root_logger.unchecked(model_name, stat_type, "total:", stat["total"], f", {eval_key}:", stat[eval_key], f", {eval_key} rate: ", round(stat[eval_key]/stat["total"]*100, 2))
+            print(model_name, stat_type, "total:", stat["total"], f", {eval_key}:", stat[eval_key], f", {eval_key} rate: ", round(stat[eval_key]/stat["total"]*100, 2))
 
     out_file = resp_file.replace("responses", "evaluations").replace(".json", "")+f"-{eval_action.value}.json"
 
@@ -339,21 +345,29 @@ def main():
     parser.add_argument('--prompt', help="The prompt to be given when querying a model", default=None)
     parser.add_argument('--src', help=f"The source to load the models from", choices=[src.value for src in ModelSrc], default=ModelSrc.AUTO.value)
     parser.add_argument('--seed', help="The seed for model inference", default=random.randint(0, 100))
+    parser.add_argument('--classes', help="A comma-seperated list of the three-letter prompt classes to respond to", default=None)
+    parser.add_argument('-n', '--num-samples', help="The number of samples to get per prompt class", default=None)
+    parser.add_argument('-v', help="The verbosity of the logging.", choices=["debug", "info", "warning", "error", "critical"], default="info")
     args = parser.parse_args()
 
     main_start = time.time()
     print(f"Begin main at {datetime.datetime.utcfromtimestamp(main_start)} UTC")
 
-    # root_logger.set_level(root_logger.DEBUG)
-    set_seed(args.seed)
+    if hasattr(logging, args.v.upper()):
+        logger.setLevel(getattr(logging, args.v.upper()))
+        universal_logger.setLevel(getattr(logging, args.v.upper()))
+    else:
+        raise ValueError(f"Unknown logging level '{args.v}'")
+
+    set_seed(int(args.seed))
 
     model_src = [src for src in ModelSrc if src.value == args.src][0]
     action = EvalAction[args.action.upper()]
 
-    num_samples = None
+    num_samples = int(args.num_samples) if args.num_samples is not None else None
 
     # Prompt class
-    prompt_classes = None
+    prompt_classes = args.classes.split(",") if args.classes is not None else None
 
     # Disable fastchat if models will not be run to needlessly create an inference server
     if action != EvalAction.RESPOND:
@@ -367,9 +381,9 @@ def main():
 
     if action == EvalAction.RESPOND:
         prompts = load_prompts(args.benchmark, prompt_classes, num_samples=num_samples)
-        generate_and_save_responses(main_model, prompts, f"data/responses/{args.benchmark.replace('/', '_')}", repetitions=1, max_new_tokens=200)
+        generate_and_save_responses(main_model, prompts, f"data/responses/{args.benchmark.replace('/', '_')}", repetitions=1, max_new_tokens=200, retries=10)
     else:
-        eval_responses_and_save(main_model.name, args.benchmark, action, prompt_classes, eval_model=args.evaluator, max_new_tokens=50)
+        eval_responses_and_save(main_model.name, args.benchmark, action, prompt_classes, eval_model=args.evaluator, max_new_tokens=50, retries=10)
 
     FastChatController.close()
     main_end = time.time()

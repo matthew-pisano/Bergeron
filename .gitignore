@@ -8,3 +8,4 @@ data/responses
 docs/pdf
 docs/researchNotes
 docs/alignmentFailures
+**/__pycache__
