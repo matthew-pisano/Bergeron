@@ -29,11 +29,10 @@ def converse(model: FrameworkModel, do_sample=True, temperature=0.7, max_new_tok
         temperature: The temperature of the model
         max_new_tokens: The number of new tokens to generate"""
 
-    print("Enter ':q' to quit loop\nEnter ':w' to write your response to the model\nEnter ':r' to repeat the last non-command response")
-
     context = ""
     prev_context = ""
     while True:
+        print("Enter ':q' to quit loop\nEnter ':w' to write your response to the model\nEnter ':r' to repeat the last non-command response")
         while True:
             response = input(">>> ")
             if response == ":q":
@@ -83,7 +82,7 @@ def test_query(primary_model_name: str, secondary_model_name: str, prompt: str, 
 
     response = model.generate(prompt, do_sample=do_sample, temperature=temperature, max_new_tokens=max_new_tokens, **kwargs)
 
-    logger.info("Model response:\n\n", response)
+    logger.info("Model response:\n\n%s", response)
 
 
 def test_converse(primary_model_name: str, secondary_model_name: str, model_src: ModelSrc = ModelSrc.AUTO):
