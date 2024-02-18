@@ -203,71 +203,47 @@ def is_alignment_failure(response: str, eval_model: FrameworkModel, do_sample=Tr
     return False
 
 
-def eval_responses_safety(eval_model: FrameworkModel, responses: dict, **kwargs):
-    """Evaluates the given responses to see if they contain unsafe content (indicating an alignment failure)
+def eval_responses(eval_action: EvalAction, responses: dict, eval_model: FrameworkModel = None, **kwargs):
+    """Evaluates the responses to a given prompt set using the given evaluation action
 
     Args:
+        eval_action: The evaluation action to perform
+        responses: The responses to evaluate
         eval_model: The model to use for evaluating the responses
-        responses: The responses to evaluate from the evaluatee model
     Returns:
-        The total number of alignment failures for each prompt class"""
+        A dictionary of statistics for the evaluation"""
 
-    stats = {"combined": {"total": 0, "failures": 0}}
+    eval_key = "failures" if eval_action == EvalAction.EVAL_RESPONSES else "detections"
+
+    stats = {"combined": {"total": 0, eval_key: 0}}
 
     num_prompts = sum([len(chunk) for chunk in responses.values()])
     pbar = tqdm(total=num_prompts, desc="Processing responses")
     for prompt_type, prompt_stats in responses.items():
-        stats[prompt_type] = {"total": 0, "failures": 0, "prompt_evals": []}
+        stats[prompt_type] = {"total": 0, eval_key: 0, "prompt_evals": []}
         for prompt_stat in prompt_stats:
-            is_failure = False
-
-            # Checks to see if any of the response samples is a failure.  If even one is a failure, the prompt defense is marked as failed
-            for resp in prompt_stat["responses"]:
-                is_failure = is_failure or is_alignment_failure(resp, eval_model, **kwargs)
-                stats[prompt_type]["prompt_evals"].append(1 if is_failure else 0)
-
-            stats[prompt_type]["total"] += 1
-            stats["combined"]["total"] += 1
-
-            if is_failure:
-                stats[prompt_type]["failures"] += 1
-                stats["combined"]["failures"] += 1
-
-            pbar.update(1)
-    pbar.close()
-
-    return stats
-
-
-def eval_secondary_detections(responses: dict):
-    """Tally the number of times the secondary model detected that a prompt was unsafe as gotten from the detection reports
-
-    Args:
-        responses: The responses to record the reports from
-    Returns:
-        The totals for how often the secondary model judged a prompt as unsafe"""
-
-    stats = {"combined": {"total": 0, "detections": 0}}
-
-    num_prompts = sum([len(chunk) for chunk in responses.values()])
-    pbar = tqdm(total=num_prompts, desc="Processing reports")
-    for prompt_type, prompt_stats in responses.items():
-        stats[prompt_type] = {"total": 0, "detections": 0, "prompt_evals": []}
-        for prompt_stat in prompt_stats:
-            dangerous_detection = False
+            # If the response triggers the given evaluation metric
+            positive_response = False
             stats[prompt_type]["prompt_evals"].append([])
 
-            # If any report was unsafe out of all generated per prompt
-            for report in prompt_stat.get("detection_reports", []):
-                dangerous_detection = dangerous_detection or report["dangerous_prompt"]
-                stats[prompt_type]["prompt_evals"][-1].append(1 if report["dangerous_prompt"] else 0)
+            for i in range(len(prompt_stat["responses"])):
+
+                if eval_action == EvalAction.EVAL_RESPONSES:
+                    # Checks to see if any of the response samples is a failure.  If even one is a failure, the prompt defense is marked as failed
+                    is_positive = is_alignment_failure(prompt_stat["responses"][i], eval_model, **kwargs)
+                else:
+                    # If any report was unsafe out of all generated per prompt
+                    is_positive = prompt_stat["detection_reports"][i]["dangerous_prompt"]
+
+                positive_response = positive_response or is_positive
+                stats[prompt_type]["prompt_evals"][-1].append(1 if is_positive else 0)
 
             stats[prompt_type]["total"] += 1
             stats["combined"]["total"] += 1
 
-            if dangerous_detection:
-                stats[prompt_type]["detections"] += 1
-                stats["combined"]["detections"] += 1
+            if positive_response:
+                stats[prompt_type][eval_key] += 1
+                stats["combined"][eval_key] += 1
 
             pbar.update(1)
     pbar.close()
@@ -302,17 +278,15 @@ def evaluate_and_save(target_model_repr: str, benchmark_name: str, eval_action: 
             logger.warning(warn_str)
             return
 
-    logger.info(f"Evaluating responses from {model_name}")
-
-    if eval_action == EvalAction.EVAL_RESPONSES:
-        stats = eval_responses_safety(eval_model, responses, **kwargs)
-        eval_key = "failures"
-    elif eval_action == EvalAction.EVAL_REPORTS:
-        stats = eval_secondary_detections(responses)
-        eval_key = "detections"
-    else:
+    if eval_action not in [EvalAction.EVAL_REPORTS, EvalAction.EVAL_RESPONSES]:
         raise ValueError(f"Unknown evaluation action '{eval_action}'")
+    if eval_model is None and eval_action == EvalAction.EVAL_RESPONSES:
+        raise ValueError("An evaluation model is required for evaluating responses")
 
+    logger.info(f"Evaluating responses from {model_name}")
+    stats = eval_responses(eval_action, responses, eval_model, **kwargs)
+
+    eval_key = "failures" if eval_action == EvalAction.EVAL_RESPONSES else "detections"
     for stat_type, stat in stats.items():
         if stat["total"] > 0:
             logger.info(f"{model_name}, {stat_type}, total: {stat['total']}, {eval_key}: {stat[eval_key]}, {eval_key} rate: {round(stat[eval_key]/stat['total']*100, 2)}")
@@ -393,13 +367,8 @@ def main():
         prompts = load_prompts(args.benchmark, prompt_classes, num_samples=num_samples)
         generate_and_save_responses(main_model, prompts, f"data/responses/{args.benchmark.replace('/', '_')}", repetitions=1, max_new_tokens=200, retries=10)
     elif action in [EvalAction.EVAL_REPORTS, EvalAction.EVAL_RESPONSES]:
-        if action == EvalAction.EVAL_REPORTS:
-            evaluate_and_save(main_model.name, args.benchmark, action, prompt_classes)
-        elif action == EvalAction.EVAL_RESPONSES and args.evaluator is not None:
-            evaluator = Primary.from_model_name(args.evaluator, model_src=model_src)
-            evaluate_and_save(main_model.name, args.benchmark, action, prompt_classes, eval_model=evaluator, max_new_tokens=50, retries=10)
-        else:
-            raise ValueError("An evaluator model must be given to evaluate responses for safety")
+        evaluator = Primary.from_model_name(args.evaluator, model_src=model_src) if args.evaluator is not None else None
+        evaluate_and_save(main_model.name, args.benchmark, action, prompt_classes, eval_model=evaluator, max_new_tokens=50, retries=10)
     else:
         raise ValueError(f"Unknown action '{action}'")
 
