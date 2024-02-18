@@ -81,44 +81,46 @@ def load_prompts(benchmark_name: str, prompt_classes: list[str] | None, num_samp
     return all_prompts
 
 
-def save_responses(out_dir: str, model_name: str, responses: dict[str, list]):
-    """Saves the current state of responses to a file
+def save_records(record_dir: str, record_file: str, records: dict):
+    """Save records to a file in the given directory while merging with existing records
 
     Args:
-        out_dir: The directory to save the responses to
-        model_name: The name of the model to save the responses for
-        responses: The responses to save"""
+        record_dir: The directory to save the records to
+        record_file: The name of the file to save the records to
+        records: The records to save to the file"""
 
-    out_file = out_dir.rstrip("/") + f"/{model_name.replace('/', '')}.json"
-    if not os.path.isdir(out_dir):
-        os.makedirs(out_dir)
+    if not os.path.isdir(record_dir):
+        os.makedirs(record_dir)
 
-    # Merge the new responses with the existing data
+    record_path = os.path.join(record_dir, record_file)
+
+    if not os.path.isfile(record_path):
+        with open(record_path, "w") as file:
+            file.write("{}")
+
+    # Merge the new records with the existing data
     # Overwrite any categories that are present in the new data
-    with open(out_file, "w+") as file:
-        content = ""
-        if os.path.isfile(out_file):
-            # Load content of existing responses
-            content = file.read()
+    with open(record_path, "w+") as file:
+        content = file.read()
 
         if len(content) > 0:
-            merged_responses = json.loads(file.read())["responses"]
+            merged_records = json.loads(file.read())
             # Copy new values over to old
-            for key in responses:
-                merged_responses[key] = responses[key]
+            for key in records:
+                merged_records[key] = records[key]
 
-            json.dump({"model": model_name, "responses": merged_responses}, file)
+            json.dump(merged_records, file)
         else:
-            json.dump({"model": model_name, "responses": responses}, file)
+            json.dump(records, file)
 
 
-def generate_and_save_responses(model: FrameworkModel, prompts: dict[str, list[str]], out_dir: str, repetitions=1, do_sample=True, temperature=0.7, max_new_tokens=None, **kwargs):
+def generate_and_save_responses(model: FrameworkModel, prompts: dict[str, list[str]], benchmark_name: str, repetitions=1, do_sample=True, temperature=0.7, max_new_tokens=None, **kwargs):
     """Generates responses from the given model for all prompts
 
     Args:
         model: The model to use for response generation
         prompts: The prompts to give to the model
-        out_dir: The directory to save the responses to
+        benchmark_name: The benchmark or prompt dataset to save the responses to
         repetitions: The number of responses to generate per prompt
         do_sample: Whether to use the sampling decoding method
         temperature: The temperature of the model
@@ -159,7 +161,9 @@ def generate_and_save_responses(model: FrameworkModel, prompts: dict[str, list[s
             responses[prompt_type].append(prompt_stats)
             pbar.update(1)
 
-        save_records(out_dir, f"{model.name.replace('/', '')}.json", responses)
+        out_dir = f"data/responses/{benchmark_name.replace('/', '_')}"
+        out_file = f"{model.name.replace('/', '')}.json"
+        save_records(out_dir, out_file, responses)
 
     pbar.close()
 
@@ -275,11 +279,12 @@ def evaluate_and_save(target_model_repr: str, benchmark_name: str, eval_action: 
         prompt_classes: The list of prompt classes to evaluate the responses for. All are evaluated if None
         eval_model: The model, if needed, to evaluate the safety of responses"""
 
-    resp_file = f"data/responses/{benchmark_name.replace('/', '_')}/{target_model_repr.replace('/', '')}.json"
+    file_ident = f"{target_model_repr.replace('/', '')}"
+    resp_file = f"data/responses/{benchmark_name.replace('/', '_')}/{file_ident}.json"
+
+    # Load responses from file, filtering by prompt classes if needed
     with open(resp_file, "r") as file:
-        loaded = json.loads(file.read())
-        model_name = loaded["model"]
-        responses = loaded["responses"]
+        responses = json.loads(file.read())
 
         if prompt_classes is not None:
             responses = {k: v for k, v in responses.items() if k in prompt_classes}
@@ -296,73 +301,19 @@ def evaluate_and_save(target_model_repr: str, benchmark_name: str, eval_action: 
     if eval_model is None and eval_action == EvalAction.EVAL_RESPONSES:
         raise ValueError("An evaluation model is required for evaluating responses")
 
-    logger.info(f"Evaluating responses from {model_name}")
+    logger.info(f"Evaluating responses from {target_model_repr}")
     evaluations = eval_responses(eval_action, responses, eval_model, **kwargs)
 
+    # Log the results of the evaluation
     eval_key = "failures" if eval_action == EvalAction.EVAL_RESPONSES else "detections"
-    for stat_type, stat in evaluations.items():
-        if stat["total"] > 0:
-            logger.info(f"{model_name}, {stat_type}, total: {stat['total']}, {eval_key}: {stat[eval_key]}, {eval_key} rate: {round(stat[eval_key]/stat['total']*100, 2)}")
+    for stat_type, eval_data in evaluations.items():
+        if eval_data["total"] > 0:
+            logger.info(f"{target_model_repr}, {stat_type}, total: {eval_data['total']}, {eval_key}: {eval_data[eval_key]}, {eval_key} rate: {round(eval_data[eval_key]/eval_data['total']*100, 2)}")
 
-    out_file = resp_file.replace("responses", "evaluations").replace(".json", "") + f"-{eval_action}.json"
-    out_dir = out_file[:out_file.rindex("/")]
+    # Save the evaluations to a file
+    out_file = f"{file_ident}-{eval_action.value}.json"
+    out_dir = f"data/evaluations/{benchmark_name.replace('/', '_')}"
     save_records(out_dir, out_file, evaluations)
-
-
-def save_evaluations(resp_file: str, eval_action: str, evaluations: dict):
-    """Saves the current state of evaluations to a file
-
-    Args:
-        """
-
-    out_file = resp_file.replace("responses", "evaluations").replace(".json", "") + f"-{eval_action}.json"
-    out_dir = out_file[:out_file.rindex("/")]
-    if not os.path.isdir(out_dir):
-        os.makedirs(out_dir)
-
-    # Merge the new evaluations with the existing data
-    # Overwrite any categories that are present in the new data
-    with open(out_file, "w+") as file:
-        content = ""
-        if os.path.isfile(out_file):
-            # Load content of existing responses
-            content = file.read()
-
-        if len(content) > 0:
-            merged_evaluations = json.loads(file.read())
-            # Copy new values over to old
-            for key in evaluations:
-                merged_evaluations[key] = evaluations[key]
-
-            json.dump(merged_evaluations, file)
-        else:
-            json.dump(evaluations, file)
-
-
-def save_records(record_dir: str, record_file: str, records: dict):
-
-    if not os.path.isdir(record_dir):
-        os.makedirs(record_dir)
-
-    record_path = os.path.join(record_dir, record_file)
-
-    # Merge the new records with the existing data
-    # Overwrite any categories that are present in the new data
-    with open(record_path, "w+") as file:
-        content = ""
-        if os.path.isfile(record_path):
-            # Load content of existing responses
-            content = file.read()
-
-        if len(content) > 0:
-            merged_records = json.loads(file.read())
-            # Copy new values over to old
-            for key in records:
-                merged_records[key] = records[key]
-
-            json.dump(merged_records, file)
-        else:
-            json.dump(records, file)
 
 
 def load_main_model(primary_model_name: str, secondary_model_name: str, action: EvalAction, model_src: ModelSrc):
@@ -379,6 +330,15 @@ def load_main_model(primary_model_name: str, secondary_model_name: str, action: 
 
 
 def log_to_file(verbosity: str, action: str, benchmark: str, primary: str, secondary: str | None = None, log_dir="logs"):
+    """Log to a file with the given verbosity
+
+    Args:
+        verbosity: The verbosity of the file logging
+        action: The action being performed
+        benchmark: The benchmark being used
+        primary: The primary model being used
+        secondary: The secondary model being used, if any
+        log_dir: The directory to save logs to"""
 
     if not os.path.isdir(log_dir):
         os.makedirs(log_dir)
@@ -386,7 +346,7 @@ def log_to_file(verbosity: str, action: str, benchmark: str, primary: str, secon
     benchmark = benchmark.replace("/", "")
     primary = primary.replace("/", "")
     secondary = secondary.replace("/", "") if secondary is not None else None
-    log_file = f"{log_dir}/bergeron-{action}-{benchmark}-{primary}-{secondary}-{datetime.datetime.now()}.log"
+    log_file = f"{log_dir}/bergeron-{action}-{benchmark}-{primary}-{secondary}-{round(datetime.datetime.now().timestamp())}.log"
 
     file_handler = logging.FileHandler(log_file)
     file_handler.setLevel(getattr(logging, verbosity.upper()))
@@ -396,6 +356,10 @@ def log_to_file(verbosity: str, action: str, benchmark: str, primary: str, secon
 
 
 def log_to_console(verbosity: str):
+    """Log to the console with the given verbosity
+
+    Args:
+        verbosity: The verbosity of the console logging"""
 
     console_handler = logging.StreamHandler(sys.stdout)
     console_handler.setLevel(getattr(logging, verbosity.upper()))
@@ -411,7 +375,7 @@ def main():
     parser.add_argument("benchmark", choices=["adversarial", "mundane", "cais/mmlu"], help="The benchmark to perform evaluations on")
     parser.add_argument("-p", "--primary", help="The name of the primary model in huggingface format like 'meta-llama/Llama-2-7b-chat-hf'", required=True)
     parser.add_argument("-s", "--secondary", help="The name of the secondary model in huggingface format like 'meta-llama/Llama-2-7b-chat-hf'", default=None)
-    parser.add_argument("--evaluator", help="The name of the model to use for evaluating prompts in huggingface format like 'meta-llama/Llama-2-7b-chat-hf'", default=None)
+    parser.add_argument("-e", "--evaluator", help="The name of the model to use for evaluating prompts in huggingface format like 'meta-llama/Llama-2-7b-chat-hf'", default=None)
     parser.add_argument('--prompt', help="The prompt to be given when querying a model", default=None)
     parser.add_argument('--src', help=f"The source to load the models from", choices=[src.value for src in ModelSrc], default=ModelSrc.AUTO.value)
     parser.add_argument('--seed', help="The seed for model inference", default=random.randint(0, 100))
@@ -452,7 +416,7 @@ def main():
 
     if action == EvalAction.RESPOND:
         prompts = load_prompts(args.benchmark, prompt_classes, num_samples=num_samples)
-        generate_and_save_responses(main_model, prompts, f"data/responses/{args.benchmark.replace('/', '_')}", repetitions=1, max_new_tokens=200, retries=10)
+        generate_and_save_responses(main_model, prompts, args.benchmark, repetitions=1, max_new_tokens=200, retries=10)
     elif action in [EvalAction.EVAL_REPORTS, EvalAction.EVAL_RESPONSES]:
         evaluator = Primary.from_model_name(args.evaluator, model_src=model_src) if args.evaluator is not None else None
 
