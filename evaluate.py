@@ -95,23 +95,30 @@ def save_records(record_dir: str, record_file: str, records: dict):
     record_path = os.path.join(record_dir, record_file)
 
     if not os.path.isfile(record_path):
+        logger.debug(f"Creating empty logger file at {record_path}")
         with open(record_path, "w") as file:
             file.write("{}")
 
     # Merge the new records with the existing data
     # Overwrite any categories that are present in the new data
-    with open(record_path, "w+") as file:
+    with open(record_path, "r") as file:
         content = file.read()
+        logger.debug(f"Merging new records with file of size {len(content)}")
 
+    final_records = records
+    with open(record_path, "w") as file:
         if len(content) > 0:
-            merged_records = json.loads(file.read())
+            merged_records = json.loads(content)
             # Copy new values over to old
             for key in records:
+                logger.debug(f"Merging record {key}")
                 merged_records[key] = records[key]
 
-            json.dump(merged_records, file)
-        else:
-            json.dump(records, file)
+            final_records = merged_records
+
+        json.dump(final_records, file)
+
+    logger.debug(f"Saved records to {record_path}")
 
 
 def generate_and_save_responses(model: FrameworkModel, prompts: dict[str, list[str]], benchmark_name: str, repetitions=1, do_sample=True, temperature=0.7, max_new_tokens=None, **kwargs):

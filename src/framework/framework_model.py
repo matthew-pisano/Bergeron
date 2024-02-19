@@ -1,5 +1,6 @@
 import torch
 from transformers import PreTrainedModel, PreTrainedTokenizer
+from universalmodels.wrappers.wrapper_model import WrapperModel
 
 from src.constants import logger
 
@@ -23,7 +24,7 @@ class FrameworkModel:
         raise NotImplementedError(f"Generate is not implemented for class {self.__class__.__name__}")
 
     @staticmethod
-    def generate_using(prompt: str, model: PreTrainedModel, tokenizer: PreTrainedTokenizer, no_echo=True, do_sample=True, temperature=0.7, max_new_tokens=128, **kwargs):
+    def generate_using(prompt: str, model: PreTrainedModel, tokenizer: PreTrainedTokenizer, no_echo=True, do_sample=True, temperature=0.7, max_new_tokens=128, retries=None, **kwargs):
         """Utility interface for generating a response from a transformers library model. Automatically handles encoding and decoding
 
         Args:
@@ -34,11 +35,16 @@ class FrameworkModel:
             do_sample: Whether to use the sampling decoding method
             temperature: The temperature of the model
             max_new_tokens: The maximum number of new tokens to generate
+            retries: The number of retries to use for the model if it is a WrapperModel
         Returns:
             The generated response string"""
 
         if max_new_tokens is None:
             max_new_tokens = 128
+
+        if isinstance(model, WrapperModel) and retries is not None:
+            logger.debug("Adding retries to model kwargs")
+            kwargs["retries"] = retries
 
         prompt_tokens = tokenizer.encode(prompt)
 
