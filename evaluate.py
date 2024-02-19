@@ -81,6 +81,31 @@ def load_prompts(benchmark_name: str, prompt_classes: list[str] | None, num_samp
     return all_prompts
 
 
+def load_responses(benchmark_name: str, target_model_repr: str, prompt_classes: list[str] | None = None):
+    """Load responses from a file and filter by prompt classes if needed
+
+    Args:
+        benchmark_name: The name of the benchmark or prompt dataset to load the responses from
+        target_model_repr: The name of the target model to load the responses for
+        prompt_classes: The set of prompt classes to filter the responses by
+
+    Returns:
+        A dictionary of prompt classes and their responses"""
+
+    resp_path = f"data/responses/{benchmark_name.replace('/', '_')}/{target_model_repr.replace('/', '')}.json"
+
+    with open(resp_path, "r") as file:
+        responses = json.loads(file.read())
+
+        if prompt_classes is not None:
+            responses = {k: v for k, v in responses.items() if k in prompt_classes}
+
+        if len(responses) == 0:
+            logger.warning(f"No responses found in {resp_path}")
+
+        return responses
+
+
 def save_records(record_dir: str, record_file: str, records: dict):
     """Save records to a file in the given directory while merging with existing records
 
@@ -138,11 +163,11 @@ def generate_and_save_responses(model: FrameworkModel, prompts: dict[str, list[s
     logger.info(f"Generating responses from {model.name}")
     responses = {key: [] for key in prompts}
 
-    num_prompts = sum([len(prompt_chunk) for prompt_chunk in prompts.values()])
+    num_prompts = sum([len(prompt_type_set) for prompt_type_set in prompts.values()])
     pbar = tqdm(total=num_prompts)
-    for prompt_type, prompt_chunk in prompts.items():
-        logger.debug(f"Generating responses for '{prompt_type}' ({len(prompt_chunk)} prompts)")
-        for prompt in prompt_chunk:
+    for prompt_type, prompt_type_set in prompts.items():
+        logger.debug(f"Generating responses for '{prompt_type}' ({len(prompt_type_set)} prompts)")
+        for prompt in prompt_type_set:
             prompt_stats = {"prompt": prompt, "responses": [], "detection_reports": []}
             i = 0
             blank_resps = 0
@@ -168,6 +193,7 @@ def generate_and_save_responses(model: FrameworkModel, prompts: dict[str, list[s
             responses[prompt_type].append(prompt_stats)
             pbar.update(1)
 
+        # Save the responses to a file for each prompt class
         out_dir = f"data/responses/{benchmark_name.replace('/', '_')}"
         out_file = f"{model.name.replace('/', '')}.json"
         save_records(out_dir, out_file, responses)
@@ -223,59 +249,6 @@ def is_alignment_failure(response: str, eval_model: FrameworkModel, do_sample=Tr
     return False
 
 
-def eval_responses(eval_action: EvalAction, responses: dict, eval_model: FrameworkModel = None, **kwargs):
-    """Evaluates the responses to a given prompt set using the given evaluation action
-
-    Args:
-        eval_action: The evaluation action to perform
-        responses: The responses to evaluate
-        eval_model: The model to use for evaluating the responses
-    Returns:
-        A dictionary of statistics for the evaluation"""
-
-    logger.info(f"Evaluating responses using {eval_model.name}")
-
-    eval_key = "failures" if eval_action == EvalAction.EVAL_RESPONSES else "detections"
-
-    stats = {"combined": {"total": 0, eval_key: 0}}
-
-    num_prompts = sum([len(chunk) for chunk in responses.values()])
-    pbar = tqdm(total=num_prompts, desc="Processing responses")
-    for prompt_type, prompt_stats in responses.items():
-        logger.debug(f"Evaluating responses from '{prompt_type}' ({len(prompt_stats)} responses)")
-        stats[prompt_type] = {"total": 0, eval_key: 0, "prompt_evals": []}
-        for prompt_stat in prompt_stats:
-            # If the response triggers the given evaluation metric
-            positive_response = False
-            stats[prompt_type]["prompt_evals"].append([])
-
-            for i in range(len(prompt_stat["responses"])):
-
-                if eval_action == EvalAction.EVAL_RESPONSES:
-                    # Checks to see if any of the response samples is a failure.  If even one is a failure, the prompt defense is marked as failed
-                    is_positive = is_alignment_failure(prompt_stat["responses"][i], eval_model, **kwargs)
-                    logger.debug(f"Evaluated response as {'DANGEROUS' if is_positive else 'SAFE'}")
-                else:
-                    # If any report was unsafe out of all generated per prompt
-                    is_positive = prompt_stat["detection_reports"][i]["dangerous_prompt"]
-                    logger.debug(f"Secondary model determined response was {'DANGEROUS' if is_positive else 'SAFE'}")
-
-                positive_response = positive_response or is_positive
-                stats[prompt_type]["prompt_evals"][-1].append(1 if is_positive else 0)
-
-            stats[prompt_type]["total"] += 1
-            stats["combined"]["total"] += 1
-
-            if positive_response:
-                stats[prompt_type][eval_key] += 1
-                stats["combined"][eval_key] += 1
-
-            pbar.update(1)
-    pbar.close()
-
-    return stats
-
-
 def evaluate_and_save(target_model_repr: str, benchmark_name: str, eval_action: EvalAction, prompt_classes: list[str] | None, eval_model: FrameworkModel = None, **kwargs):
     """Evaluates all saved responses for a given dataset or benchmark using the given evaluation action and saves the result
 
@@ -286,22 +259,8 @@ def evaluate_and_save(target_model_repr: str, benchmark_name: str, eval_action: 
         prompt_classes: The list of prompt classes to evaluate the responses for. All are evaluated if None
         eval_model: The model, if needed, to evaluate the safety of responses"""
 
-    file_ident = f"{target_model_repr.replace('/', '')}"
-    resp_file = f"data/responses/{benchmark_name.replace('/', '_')}/{file_ident}.json"
-
     # Load responses from file, filtering by prompt classes if needed
-    with open(resp_file, "r") as file:
-        responses = json.loads(file.read())
-
-        if prompt_classes is not None:
-            responses = {k: v for k, v in responses.items() if k in prompt_classes}
-
-        if len(responses) == 0:
-            warn_str = f"No responses found for {target_model_repr} in {benchmark_name}"
-            if prompt_classes is not None:
-                warn_str += f" for prompt classes {prompt_classes}"
-            logger.warning(warn_str)
-            return
+    responses = load_responses(benchmark_name, target_model_repr, prompt_classes)
 
     if eval_action not in [EvalAction.EVAL_REPORTS, EvalAction.EVAL_RESPONSES]:
         raise ValueError(f"Unknown evaluation action '{eval_action}'")
@@ -309,18 +268,47 @@ def evaluate_and_save(target_model_repr: str, benchmark_name: str, eval_action: 
         raise ValueError("An evaluation model is required for evaluating responses")
 
     logger.info(f"Evaluating responses from {target_model_repr}")
-    evaluations = eval_responses(eval_action, responses, eval_model, **kwargs)
-
-    # Log the results of the evaluation
     eval_key = "failures" if eval_action == EvalAction.EVAL_RESPONSES else "detections"
-    for stat_type, eval_data in evaluations.items():
-        if eval_data["total"] > 0:
-            logger.info(f"{target_model_repr}, {stat_type}, total: {eval_data['total']}, {eval_key}: {eval_data[eval_key]}, {eval_key} rate: {round(eval_data[eval_key]/eval_data['total']*100, 2)}")
+    evaluations = {"combined": {"total": 0, eval_key: 0}}
 
-    # Save the evaluations to a file
-    out_file = f"{file_ident}-{eval_action.value}.json"
-    out_dir = f"data/evaluations/{benchmark_name.replace('/', '_')}"
-    save_records(out_dir, out_file, evaluations)
+    num_prompts = sum([len(chunk) for chunk in responses.values()])
+    pbar = tqdm(total=num_prompts, desc="Processing responses")
+    for prompt_type, response_type_set in responses.items():
+        logger.debug(f"Evaluating responses from '{prompt_type}' ({len(response_type_set)} responses)")
+        evaluations[prompt_type] = {"total": 0, eval_key: 0, "prompt_evals": []}
+
+        for response_data in response_type_set:
+            # If the response triggers the given evaluation metric
+            positive_response = False
+            evaluations[prompt_type]["prompt_evals"].append([])
+            # Evaluate for each repeated response to a single prompt
+            for i in range(len(response_data["responses"])):
+
+                if eval_action == EvalAction.EVAL_RESPONSES:
+                    # Checks to see if any of the response samples is a failure.  If even one is a failure, the prompt defense is marked as failed
+                    is_positive = is_alignment_failure(response_data["responses"][i], eval_model, **kwargs)
+                    logger.debug(f"Evaluated response as {'DANGEROUS' if is_positive else 'SAFE'}")
+                else:
+                    # If any report was unsafe out of all generated per prompt
+                    is_positive = response_data["detection_reports"][i]["dangerous_prompt"]
+                    logger.debug(f"Secondary model determined response was {'DANGEROUS' if is_positive else 'SAFE'}")
+
+                positive_response = positive_response or is_positive
+                evaluations[prompt_type]["prompt_evals"][-1].append(1 if is_positive else 0)
+
+            evaluations[prompt_type][eval_key] += 1 if positive_response else 0
+            evaluations["combined"][eval_key] += 1 if positive_response else 0
+            evaluations[prompt_type]["total"] += 1
+            evaluations["combined"]["total"] += 1
+
+            pbar.update(1)
+
+        # Save the evaluations to a file for each prompt class
+        out_file = f"{target_model_repr.replace('/', '')}-{eval_action.value}.json"
+        out_dir = f"data/evaluations/{benchmark_name.replace('/', '_')}"
+        save_records(out_dir, out_file, evaluations)
+
+    pbar.close()
 
 
 def load_main_model(primary_model_name: str, secondary_model_name: str, action: EvalAction, model_src: ModelSrc):
