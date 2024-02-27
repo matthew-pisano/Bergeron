@@ -9,6 +9,8 @@ import time
 from enum import Enum
 
 import argparse
+
+import coloredlogs
 from tqdm import tqdm
 from dotenv import load_dotenv
 from universalmodels import ModelSrc
@@ -106,13 +108,14 @@ def load_responses(benchmark_name: str, target_model_repr: str, prompt_classes: 
         return responses
 
 
-def save_records(record_dir: str, record_file: str, records: dict):
+def save_records(record_dir: str, record_file: str, records: dict, eval_key: str = None):
     """Save records to a file in the given directory while merging with existing records
 
     Args:
         record_dir: The directory to save the records to
         record_file: The name of the file to save the records to
-        records: The records to save to the file"""
+        records: The records to save to the file
+        eval_key: The key to use for the evaluation of records, if any"""
 
     if not os.path.isdir(record_dir):
         os.makedirs(record_dir)
@@ -138,6 +141,11 @@ def save_records(record_dir: str, record_file: str, records: dict):
             for key in records:
                 logger.debug(f"Merging record {key}")
                 merged_records[key] = records[key]
+
+            # Merge the combined records as well
+            if "combined" in merged_records and eval_key is not None:
+                merged_records["combined"]["total"] = sum([merged_records[cls]["total"] for cls in merged_records if cls != "combined"])
+                merged_records["combined"][eval_key] = sum([merged_records[cls][eval_key] for cls in merged_records if cls != "combined"])
 
             final_records = merged_records
 
@@ -231,6 +239,7 @@ def is_alignment_failure(response: str, eval_model: FrameworkModel, do_sample=Tr
         Whether the response given contained unsafe content (indicating a failure of alignment)"""
 
     if is_obvious_refusal(response):
+        logger.debug("Response is an obvious refusal")
         return False
 
     prompt = EVAL_PROMPT.format(response=response, safe_kw=safe_kw, unsafe_kw=unsafe_kw)
@@ -290,7 +299,8 @@ def evaluate_and_save(target_model_repr: str, benchmark_name: str, eval_action: 
                     logger.debug(f"Evaluated response as {'DANGEROUS' if is_positive else 'SAFE'}")
                 else:
                     # If any report was unsafe out of all generated per prompt
-                    is_positive = response_data["detection_reports"][i]["dangerous_prompt"]
+                    is_positive = response_data["detection_reports"][i]["dangerous_prompt"] \
+                                  or response_data["detection_reports"][i]["dangerous_response"]
                     logger.debug(f"Secondary model determined response was {'DANGEROUS' if is_positive else 'SAFE'}")
 
                 positive_response = positive_response or is_positive
@@ -306,7 +316,7 @@ def evaluate_and_save(target_model_repr: str, benchmark_name: str, eval_action: 
         # Save the evaluations to a file for each prompt class
         out_file = f"{target_model_repr.replace('/', '')}-{eval_action.value}.json"
         out_dir = f"data/evaluations/{benchmark_name.replace('/', '_')}"
-        save_records(out_dir, out_file, evaluations)
+        save_records(out_dir, out_file, evaluations, eval_key=eval_key)
 
     pbar.close()
 
@@ -350,17 +360,29 @@ def log_to_file(verbosity: str, action: str, benchmark: str, primary: str, secon
     universal_logger.addHandler(file_handler)
 
 
-def log_to_console(verbosity: str):
+def log_to_console(verbosity: str, colored=True):
     """Log to the console with the given verbosity
 
     Args:
-        verbosity: The verbosity of the console logging"""
+        verbosity: The verbosity of the console logging
+        colored: Whether to use colored logging or not"""
 
-    console_handler = logging.StreamHandler(sys.stdout)
-    console_handler.setLevel(getattr(logging, verbosity.upper()))
-    console_handler.setFormatter(logging.Formatter('[%(levelname)s %(name)s @ %(asctime)s] %(message)s', "%H:%M:%S"))
-    logger.addHandler(console_handler)
-    universal_logger.addHandler(console_handler)
+    if not colored:
+        console_handler = logging.StreamHandler(sys.stdout)
+        console_handler.setLevel(getattr(logging, verbosity.upper()))
+        console_handler.setFormatter(logging.Formatter('[ %(levelname)s %(name)s @ %(asctime)s ] %(message)s', "%H:%M:%S"))
+        logger.addHandler(console_handler)
+        universal_logger.addHandler(console_handler)
+    else:
+        field_styles = dict(
+            asctime=dict(color='green'),
+            hostname=dict(color='magenta'),
+            levelname=dict(bold=True, italic=True),
+            name=dict(color='blue'),
+            programname=dict(color='cyan'),
+            username=dict(color='yellow'),
+        )
+        coloredlogs.install(level=verbosity.upper(), fmt="[ %(levelname)s %(name)s @ %(asctime)s ] %(message)s", datefmt="%H:%M:%S", field_styles=field_styles)
 
 
 def main():
@@ -370,6 +392,7 @@ def main():
     parser.add_argument("benchmark", choices=["adversarial", "mundane", "cais/mmlu"], help="The benchmark to perform evaluations on")
     parser.add_argument("-p", "--primary", help="The name of the primary model in huggingface format like 'meta-llama/Llama-2-7b-chat-hf'", required=True)
     parser.add_argument("-s", "--secondary", help="The name of the secondary model in huggingface format like 'meta-llama/Llama-2-7b-chat-hf'", default=None)
+    parser.add_argument("-r", "--rephrase", help="The name of the secondary rephrasing model in huggingface format like ''", default=None)
     parser.add_argument("-e", "--evaluator", help="The name of the model to use for evaluating prompts in huggingface format like 'meta-llama/Llama-2-7b-chat-hf'", default=None)
     parser.add_argument('--prompt', help="The prompt to be given when querying a model", default=None)
     parser.add_argument('--src', help=f"The source to load the models from", choices=[src.value for src in ModelSrc], default=ModelSrc.AUTO.value)
@@ -420,7 +443,7 @@ def main():
             eval_keywords["safe_kw"] = args.safe_resp_kw
         if args.unsafe_resp_kw is not None:
             eval_keywords["unsafe_kw"] = args.unsafe_resp_kw
-        evaluate_and_save(main_model.name, args.benchmark, action, prompt_classes, eval_model=evaluator, max_new_tokens=50, retries=10, **eval_keywords)
+        evaluate_and_save(main_model.name, args.benchmark, action, prompt_classes, eval_model=evaluator, max_new_tokens=50, retries=10, max_eval_retries=3, **eval_keywords)
     else:
         raise ValueError(f"Unknown action '{action}'")
 
