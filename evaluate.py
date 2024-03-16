@@ -108,6 +108,24 @@ def load_responses(benchmark_name: str, target_model_repr: str, prompt_classes: 
         return responses
 
 
+def existing_record_classes(record_dir: str, record_file: str) -> list[str]:
+    """Gets the prompt classes that have already been saved in the given record file
+
+    Args:
+        record_dir: The directory to look for the record file in
+        record_file: The name of the record file to look for
+
+    Returns:
+        A list of prompt classes that have already been saved in the record file"""
+
+    record_path = os.path.join(record_dir, record_file)
+    if not os.path.isfile(record_path):
+        return []
+
+    with open(record_path, "r") as file:
+        return list(json.loads(file.read()).keys())
+
+
 def save_records(record_dir: str, record_file: str, records: dict, eval_key: str = None):
     """Save records to a file in the given directory while merging with existing records
 
@@ -154,7 +172,7 @@ def save_records(record_dir: str, record_file: str, records: dict, eval_key: str
     logger.debug(f"Saved records to {record_path}")
 
 
-def generate_and_save_responses(model: FrameworkModel, prompts: dict[str, list[str]], benchmark_name: str, repetitions=1, do_sample=True, temperature=0.7, max_new_tokens=None, **kwargs):
+def generate_and_save_responses(model: FrameworkModel, prompts: dict[str, list[str]], benchmark_name: str, repetitions=1, do_sample=True, temperature=0.7, max_new_tokens=None, no_overwrite=False, **kwargs):
     """Generates responses from the given model for all prompts
 
     Args:
@@ -165,16 +183,29 @@ def generate_and_save_responses(model: FrameworkModel, prompts: dict[str, list[s
         do_sample: Whether to use the sampling decoding method
         temperature: The temperature of the model
         max_new_tokens: The maximum number of new tokens to generate
+        no_overwrite: Whether to overwrite existing response data
     Returns:
         A dictionary of prompt classes and their responses"""
 
     logger.info(f"Generating responses from {model.name}")
-    responses = {key: [] for key in prompts}
+    responses = {}
+
+    # Save the responses to a file for each prompt class
+    out_dir = f"data/responses/{benchmark_name.replace('/', '_')}"
+    out_file = f"{model.name.replace('/', '')}.json"
+    existing_classes = existing_record_classes(out_dir, out_file)
 
     num_prompts = sum([len(prompt_type_set) for prompt_type_set in prompts.values()])
     pbar = tqdm(total=num_prompts)
     for prompt_type, prompt_type_set in prompts.items():
+
+        if no_overwrite and prompt_type in existing_classes:
+            logger.info(f"Skipping prompt class '{prompt_type}' as it already exists in the records")
+            pbar.update(len(prompt_type_set))
+            continue
+
         logger.debug(f"Generating responses for '{prompt_type}' ({len(prompt_type_set)} prompts)")
+        responses[prompt_type] = []
         for prompt in prompt_type_set:
             prompt_stats = {"prompt": prompt, "responses": [], "detection_reports": []}
             i = 0
@@ -201,9 +232,6 @@ def generate_and_save_responses(model: FrameworkModel, prompts: dict[str, list[s
             responses[prompt_type].append(prompt_stats)
             pbar.update(1)
 
-        # Save the responses to a file for each prompt class
-        out_dir = f"data/responses/{benchmark_name.replace('/', '_')}"
-        out_file = f"{model.name.replace('/', '')}.json"
         save_records(out_dir, out_file, responses)
 
     pbar.close()
@@ -258,7 +286,7 @@ def is_alignment_failure(response: str, eval_model: FrameworkModel, do_sample=Tr
     return False
 
 
-def evaluate_and_save(target_model_repr: str, benchmark_name: str, eval_action: EvalAction, prompt_classes: list[str] | None, eval_model: FrameworkModel = None, **kwargs):
+def evaluate_and_save(target_model_repr: str, benchmark_name: str, eval_action: EvalAction, prompt_classes: list[str] | None, eval_model: FrameworkModel = None, no_overwrite=False, **kwargs):
     """Evaluates all saved responses for a given dataset or benchmark using the given evaluation action and saves the result
 
     Args:
@@ -266,7 +294,8 @@ def evaluate_and_save(target_model_repr: str, benchmark_name: str, eval_action: 
         benchmark_name: The name of the benchmark or prompt dataset to evaluate the responses to
         eval_action: The evaluation action to perform
         prompt_classes: The list of prompt classes to evaluate the responses for. All are evaluated if None
-        eval_model: The model, if needed, to evaluate the safety of responses"""
+        eval_model: The model, if needed, to evaluate the safety of responses
+        no_overwrite: Whether to overwrite existing evaluation data"""
 
     # Load responses from file, filtering by prompt classes if needed
     responses = load_responses(benchmark_name, target_model_repr, prompt_classes)
@@ -280,9 +309,20 @@ def evaluate_and_save(target_model_repr: str, benchmark_name: str, eval_action: 
     eval_key = "failures" if eval_action == EvalAction.EVAL_RESPONSES else "detections"
     evaluations = {"combined": {"total": 0, eval_key: 0}}
 
+    # Save the evaluations to a file for each prompt class
+    out_file = f"{target_model_repr.replace('/', '')}-{eval_action.value}.json"
+    out_dir = f"data/evaluations/{benchmark_name.replace('/', '_')}"
+    existing_classes = existing_record_classes(out_dir, out_file)
+
     num_prompts = sum([len(chunk) for chunk in responses.values()])
     pbar = tqdm(total=num_prompts, desc="Processing responses")
     for prompt_type, response_type_set in responses.items():
+
+        if no_overwrite and prompt_type in existing_classes:
+            logger.info(f"Skipping prompt class '{prompt_type}' as it already exists in the evaluation records")
+            pbar.update(len(response_type_set))
+            continue
+
         logger.debug(f"Evaluating responses from '{prompt_type}' ({len(response_type_set)} responses)")
         evaluations[prompt_type] = {"total": 0, eval_key: 0, "prompt_evals": []}
 
@@ -313,9 +353,6 @@ def evaluate_and_save(target_model_repr: str, benchmark_name: str, eval_action: 
 
             pbar.update(1)
 
-        # Save the evaluations to a file for each prompt class
-        out_file = f"{target_model_repr.replace('/', '')}-{eval_action.value}.json"
-        out_dir = f"data/evaluations/{benchmark_name.replace('/', '_')}"
         save_records(out_dir, out_file, evaluations, eval_key=eval_key)
 
     pbar.close()
@@ -404,6 +441,7 @@ def main():
     parser.add_argument('--safe-resp-kw', help="The keyword for the evaluation model to use when indicating that a response is safe.", default=None)
     parser.add_argument('--unsafe-resp-kw', help="The keyword for the evaluation model to use when indicating that a response is dangerous.", default=None)
     parser.add_argument('--log-dir', help="The directory to save logs to.", default="logs")
+    parser.add_argument('--no-overwrite', help="Whether to overwrite existing response or evaluation data.  If present, new data for existing prompt classes will be skipped.", action="store_true")
     args = parser.parse_args()
 
     logger.handlers.clear()
@@ -422,6 +460,9 @@ def main():
 
     set_seed(int(args.seed))
 
+    if args.no_overwrite:
+        logger.info("Skipping over any existing prompt classes")
+
     model_src = [src for src in ModelSrc if src.value == args.src][0]
     action = EvalAction[args.action.upper()]
 
@@ -434,7 +475,7 @@ def main():
 
     if action == EvalAction.RESPOND:
         prompts = load_prompts(args.benchmark, prompt_classes, num_samples=num_samples)
-        generate_and_save_responses(main_model, prompts, args.benchmark, repetitions=1, max_new_tokens=200, retries=10)
+        generate_and_save_responses(main_model, prompts, args.benchmark, repetitions=1, max_new_tokens=200, retries=10, no_overwrite=args.no_overwrite)
     elif action in [EvalAction.EVAL_REPORTS, EvalAction.EVAL_RESPONSES]:
         evaluator = Primary.from_model_name(args.evaluator, model_src=model_src) if args.evaluator is not None else None
 
