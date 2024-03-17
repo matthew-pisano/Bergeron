@@ -24,7 +24,7 @@ class Benchmark:
         if self.held_out_split not in split:
             split.append(self.held_out_split)
 
-        split_dataset = load_dataset(self.repo, config_name, split=split)
+        split_dataset = load_dataset(self.repo, config_name, split=split, num_proc=2)
         self.dataset = {split_name: split_dataset[split_idx] for split_idx, split_name in enumerate(split)}
         self.split = split
 
@@ -64,7 +64,7 @@ class Benchmark:
 
         ...
 
-    def batch_format_questions(self, split_name: str = "", n_shot=0):
+    def batch_format_questions(self, split_name: str = None, n_shot=0):
         """Formats all questions within a given split of the dataset
 
         Args:

@@ -57,8 +57,11 @@ def load_prompts(benchmark_name: str, prompt_classes: list[str] | None, num_samp
         if prompt_classes is None:
             prompt_classes = benchmark_class_from_name(benchmark_name).configs()
         for prompt_cls in tqdm(prompt_classes, desc="Loading dataset"):
-            samples = benchmark_from_name(benchmark_name, config_name=prompt_cls, split=["test"]).batch_format_questions(n_shot=1)
-            all_prompts[prompt_cls] = samples[:num_samples if num_samples is not None else len(samples)]
+            try:
+                samples = benchmark_from_name(benchmark_name, config_name=prompt_cls, split=["test"]).batch_format_questions(n_shot=1)
+                all_prompts[prompt_cls] = samples[:num_samples if num_samples is not None else len(samples)]
+            except ValueError as e:
+                logger.warning(f"Could not load prompt class '{prompt_cls}' from the benchmark: {benchmark_name} with error: {e}")
 
         return all_prompts
 
@@ -67,7 +70,7 @@ def load_prompts(benchmark_name: str, prompt_classes: list[str] | None, num_samp
 
     remaining_classes = prompt_classes.copy() if prompt_classes is not None else None
 
-    for file_name in tqdm(prompt_files, desc="Loading dataset"):
+    for file_name in tqdm(prompt_files, desc=f"Loading '{benchmark_name}' dataset"):
         prompt_cls = file_name.split("_")[0]
         if prompt_classes is None or prompt_cls in prompt_classes:
             with open(f"data/prompts/{benchmark_name}/{file_name}", "r") as file:
@@ -338,6 +341,9 @@ def evaluate_and_save(target_model_repr: str, benchmark_name: str, eval_action: 
                     is_positive = is_alignment_failure(response_data["responses"][i], eval_model, **kwargs)
                     logger.debug(f"Evaluated response as {'DANGEROUS' if is_positive else 'SAFE'}")
                 else:
+                    if not response_data["detection_reports"][i]["sealed"]:
+                        raise ValueError("Cannot evaluate a detection report that has not been sealed")
+
                     # If any report was unsafe out of all generated per prompt
                     is_positive = response_data["detection_reports"][i]["dangerous_prompt"] \
                                   or response_data["detection_reports"][i]["dangerous_response"]
@@ -429,7 +435,6 @@ def main():
     parser.add_argument("benchmark", choices=["adversarial", "mundane", "cais/mmlu"], help="The benchmark to perform evaluations on")
     parser.add_argument("-p", "--primary", help="The name of the primary model in huggingface format like 'meta-llama/Llama-2-7b-chat-hf'", required=True)
     parser.add_argument("-s", "--secondary", help="The name of the secondary model in huggingface format like 'meta-llama/Llama-2-7b-chat-hf'", default=None)
-    parser.add_argument("-r", "--rephrase", help="The name of the secondary rephrasing model in huggingface format like ''", default=None)
     parser.add_argument("-e", "--evaluator", help="The name of the model to use for evaluating prompts in huggingface format like 'meta-llama/Llama-2-7b-chat-hf'", default=None)
     parser.add_argument('--prompt', help="The prompt to be given when querying a model", default=None)
     parser.add_argument('--src', help=f"The source to load the models from", choices=[src.value for src in ModelSrc], default=ModelSrc.AUTO.value)

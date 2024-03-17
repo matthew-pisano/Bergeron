@@ -7,57 +7,32 @@ from src.strings import PROMPT_CRITIQUE_PROMPT, RESPONSE_CRITIQUE_PROMPT, CONSCI
 class Secondary(FrameworkModel):
     """The conscience model.  This examines both the user input and model output for alignment violations"""
 
-    def __init__(self, critique_model_info: ModelInfo, rephrase_model_info: ModelInfo):
+    def __init__(self, model_info: ModelInfo):
         """
         Args:
-            critique_model_info: The information for the critique model
-            rephrase_model_info: The information for the rephrasing model"""
+            model_info: The information for the critique model"""
 
-        self.critique_model, self.critique_tokenizer = pretrained_from_info(critique_model_info)
-        self.rephrase_model, self.rephrase_tokenizer = pretrained_from_info(rephrase_model_info)
+        self.model, self.tokenizer = pretrained_from_info(model_info)
 
     @classmethod
-    def from_model_names(cls, secondary_model_name: str, rephrase_model_name: str = "dev/echo",
-                         secondary_model_src: ModelSrc = ModelSrc.AUTO, rephrase_model_src: ModelSrc = ModelSrc.AUTO):
+    def from_model_names(cls, secondary_model_name: str, model_src: ModelSrc = ModelSrc.AUTO):
         """Creates a secondary model from the names of its primary and secondary models
 
         Args:
             secondary_model_name: The name of the secondary model
-            rephrase_model_name: The name of the rephrasing model
-            secondary_model_src: The suggested source of the secondary model to load. Defaults to AUTO
-            rephrase_model_src: The suggested source of the rephrasing model to load. Defaults to AUTO
+            model_src: The suggested source of the secondary model to load. Defaults to AUTO
         Returns:
             An instance of a secondary model"""
 
-        s_model_info = model_info_from_name(secondary_model_name, model_src=secondary_model_src, model_task="conversational")
-        # Optional rephrasing model
-        rephrase_model_info = model_info_from_name(rephrase_model_name, model_src=rephrase_model_src, model_task="summarization")
-
-        return cls(s_model_info, rephrase_model_info)
+        s_model_info = model_info_from_name(secondary_model_name, model_src=model_src, model_task="conversational")
+        return cls(s_model_info)
 
     @property
     def name(self):
-        return f"S({self.critique_model.name_or_path})"
+        return f"S({self.model.name_or_path})"
 
     def generate(self, prompt: str, **kwargs):
-        """Generates a response to the prompt from the critique model
-
-        Args:
-            prompt: The prompt to generate a response for
-        Returns:
-            The generated response string"""
-
-        return self.generate_using(prompt, self.critique_model, self.critique_tokenizer, **kwargs)
-
-    def rephrase(self, text: str, **kwargs):
-        """Rephrase the given text by using the rephrasing model
-
-        Args:
-            text: The text to rephrase
-        Returns:
-            The rephrased text"""
-
-        return self.generate_using(text, self.rephrase_model, self.rephrase_tokenizer, **kwargs)
+        return self.generate_using(prompt, self.model, self.tokenizer, **kwargs)
 
     def critique_prompt(self, prompt: str, **kwargs):
         """Generates a critique of the given prompt.  If harmful or dangerous contents are detected, a suggestion will be generated
@@ -67,7 +42,7 @@ class Secondary(FrameworkModel):
         Returns:
             The generated critique for the prompt"""
 
-        critique_response = self.generate_using(PROMPT_CRITIQUE_PROMPT.format(prompt=prompt), self.critique_model, self.critique_tokenizer, **kwargs)
+        critique_response = self.generate(PROMPT_CRITIQUE_PROMPT.format(prompt=prompt), **kwargs)
         return critique_response if self.is_valid_critique(critique_response) else ""
 
     def critique_response(self, response: str, **kwargs):
@@ -78,7 +53,7 @@ class Secondary(FrameworkModel):
         Returns:
             The generated critique for the response"""
 
-        critique_response = self.generate_using(RESPONSE_CRITIQUE_PROMPT.format(response=response), self.critique_model, self.critique_tokenizer, **kwargs)
+        critique_response = self.generate(RESPONSE_CRITIQUE_PROMPT.format(response=response), **kwargs)
         return critique_response if self.is_valid_critique(critique_response) else ""
 
     @staticmethod

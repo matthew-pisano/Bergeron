@@ -42,29 +42,25 @@ class Bergeron(FrameworkModel):
         self.secondary = secondary_model
 
     @classmethod
-    def from_model_names(cls, primary_model_name: str, secondary_model_name: str, rephrase_model_name: str = "dev/echo",
-                         primary_model_src: ModelSrc = ModelSrc.AUTO, secondary_model_src: ModelSrc = ModelSrc.AUTO,
-                         rephrase_model_src: ModelSrc = ModelSrc.AUTO):
+    def from_model_names(cls, primary_model_name: str, secondary_model_name: str,
+                         primary_model_src: ModelSrc = ModelSrc.AUTO, secondary_model_src: ModelSrc = ModelSrc.AUTO):
         """Creates a bergeron model from the names of its primary and secondary models
 
         Args:
             primary_model_name: The name of the primary model
             secondary_model_name: The name of the secondary model
-            rephrase_model_name: The name of the rephrasing model
             primary_model_src: The suggested source of the primary model to load. Defaults to AUTO
             secondary_model_src: The suggested source of the secondary model to load. Defaults to AUTO
-            rephrase_model_src: The suggested source of the rephrasing model to load. Defaults to AUTO
         Returns:
             An instance of a bergeron model"""
 
         primary = Primary.from_model_name(primary_model_name, model_src=primary_model_src)
-        secondary = Secondary.from_model_names(secondary_model_name, rephrase_model_name, secondary_model_src=secondary_model_src, rephrase_model_src=rephrase_model_src)
-
+        secondary = Secondary.from_model_names(secondary_model_name, model_src=secondary_model_src)
         return cls(primary, secondary)
 
     @property
     def name(self):
-        return f"C({self.primary.model.name_or_path}, {self.secondary.critique_model.name_or_path})"
+        return f"C({self.primary.model.name_or_path}, {self.secondary.model.name_or_path})"
 
     def generate(self, prompt: str, detection_report: DetectionReport = None, **kwargs):
         """Generates a response to the prompt from the primary model while sing the secondary to monitor for unsafe text
@@ -77,11 +73,8 @@ class Bergeron(FrameworkModel):
 
         prompt = prompt.strip("\n").strip(" ")
 
-        logger.debug("Rephrasing prompt...")
-        rephrased_prompt = self.secondary.rephrase(prompt)
-
         logger.debug("Critiquing prompt...")
-        input_critique = self.secondary.critique_prompt(rephrased_prompt, **kwargs)
+        input_critique = self.secondary.critique_prompt(prompt, **kwargs)
 
         # Checking the response for unsafe content and correcting
         if len(input_critique) > 0:

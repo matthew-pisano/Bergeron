@@ -1,7 +1,12 @@
 datasets~=2.17
 python-dotenv~=1.0
-universalmodels @ git+https://github.com/matthew-pisano/UniversalModels
+universalmodels>=0.0.6
 huggingface-hub~=0.20
 transformers~=4.35
 openai~=1.7
 torch~=2.1
+
+universalmodels~=0.0.5
+nltk~=3.8.1
+coloredlogs~=15.0.1
+tqdm~=4.66.2
